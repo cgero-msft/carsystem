@@ -3,6 +3,9 @@ import numpy as np
 import threading
 from pynput import keyboard
 import time
+from board import SCL, SDA
+import busio
+from adafruit_pca9685 import PCA9685
 
 # Stable camera device paths
 camera_paths = {
