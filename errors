@@ -1,25 +1,27 @@
 cgero88@raspberrypi:~ $ python3 UnifiedTest.py
-tvservice is not supported when using the vc4-kms-v3d driver.
-Similar features are available with standard linux tools
-such as kmsprint from kms++-utils
-📺 Using OpenCV fallback resolution detection
-📺 Detected screen resolution: 1x1
+📺 Using fixed resolution: 1024x600
 🎥 Webcam viewer ready
 🕹️  Hotkeys:
   - 1/2/3 = Fullscreen view
   - 0 + two cameras = Multiview
   - A/S/D/F/G/H = Fan speed
   - ESC = Quit
+📱 Touch UI available for camera and fan control
 📷 Showing multiview: Camera 1 and Camera 2
-🔎 Fullscreen view: Camera 2
-Exception in thread Thread-3:
+Touch at (200, 512)
+Camera menu opened
+Touch at (644, 511)
+📺 Select two cameras for multiview
+Touch at (377, 328)
+Selected cameras: ['1']
+Touch at (645, 330)
+Selected cameras: ['1', '3']
 Traceback (most recent call last):
-  File "/usr/lib/python3.9/threading.py", line 954, in _bootstrap_inner
-    self.run()
-  File "/usr/lib/python3.9/threading.py", line 892, in run
-    self._target(*self._args, **self._kwargs)
-  File "/home/cgero88/UnifiedTest.py", line 203, in display
-    frame = cv2.resize(frame, (new_w, new_h))
-cv2.error: OpenCV(4.11.0) /tmp/pip-wheel-4bfp8dfj/opencv-python_9948b8f0fe2c41ffa83bf965d58de99a/opencv/modules/imgproc/src/resize.cpp:4211: error: (-215:Assertion failed) inv_scale_x > 0 in function 'resize'
-
-^[👋 Exiting...
+  File "/home/cgero88/UnifiedTest.py", line 293, in handle_touch
+    switch_mode('multi', multiview_selection)
+  File "/home/cgero88/UnifiedTest.py", line 496, in switch_mode
+    display_thread.join()
+  File "/usr/lib/python3.9/threading.py", line 1030, in join
+    raise RuntimeError("cannot join current thread")
+RuntimeError: cannot join current thread
+👋 Exiting...
