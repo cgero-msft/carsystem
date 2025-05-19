@@ -88,9 +88,9 @@ class CameraUI(tk.Tk):
         self.camera_buttons_frame.place(relx=0.16, rely=0.5, anchor="center")
         
         # Common button style parameters
-        button_width = 50
-        button_height = 50
-        button_font = ("Arial", 14, "bold")
+        button_width = 100
+        button_height = 100
+        button_font = ("Arial", 16, "bold")
         button_params = {
             "font": button_font,
             "width": 4,
