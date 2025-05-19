@@ -30,16 +30,39 @@ def get_screen_resolution():
         print(f"📺 Detected screen resolution: {width}x{height}")
         return width, height
     except:
-        # Fallback method
-        print("📺 Using fallback resolution detection")
-        temp = np.zeros((1, 1, 3), dtype=np.uint8)
-        cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        screen_width = cv2.getWindowImageRect('temp')[2]
-        screen_height = cv2.getWindowImageRect('temp')[3]
-        cv2.destroyWindow('temp')
-        print(f"📺 Detected screen resolution: {screen_width}x{screen_height}")
-        return screen_width, screen_height
+        # First fallback - try with xrandr
+        try:
+            import subprocess
+            output = subprocess.check_output("xrandr | grep current", shell=True).decode()
+            parts = output.split(',')[0].split()
+            width = int(parts[parts.index("current") + 1])
+            height = int(parts[parts.index("current") + 3])
+            print(f"📺 Detected screen resolution using xrandr: {width}x{height}")
+            return width, height
+        except:
+            # Second fallback using CV2 method
+            try:
+                print("📺 Using OpenCV fallback resolution detection")
+                temp = np.zeros((1, 1, 3), dtype=np.uint8)
+                cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
+                cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                cv2.imshow('temp', temp)
+                cv2.waitKey(100)  # Wait a bit for window to initialize
+                rect = cv2.getWindowImageRect('temp')
+                screen_width = rect[2]
+                screen_height = rect[3]
+                cv2.destroyWindow('temp')
+                
+                # Check if values are valid
+                if screen_width > 0 and screen_height > 0:
+                    print(f"📺 Detected screen resolution: {screen_width}x{screen_height}")
+                    return screen_width, screen_height
+                else:
+                    raise ValueError("Invalid screen dimensions")
+            except:
+                # Last resort - hardcoded values for Raspberry Pi
+                print("📺 Using default Raspberry Pi resolution (1024x600)")
+                return 1024, 600  # Common Pi display resolution
 
 # Use a global variable to store screen dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
@@ -56,9 +79,14 @@ def get_single_frame(path):
     return cv2.resize(frame, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 def show_multiview(cam_keys):
-    global stop_thread
+    global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
     stop_thread = False
     print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
+
+    # Ensure we have valid screen dimensions
+    if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
+        print("⚠️ Invalid screen dimensions, resetting to defaults")
+        SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
 
     def display():
         caps = []
@@ -71,10 +99,15 @@ def show_multiview(cam_keys):
         # Create window with Raspberry Pi optimized settings
         window_name = 'MultiView (press q to exit)'
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        
+        # Allow window system to initialize
+        time.sleep(0.5)
+        
         # Force window to be positioned at 0,0 and set size explicitly
         cv2.moveWindow(window_name, 0, 0)
         cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
-        # Set fullscreen after positioning
+        
+        # Set fullscreen 
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         while not stop_thread:
@@ -87,9 +120,9 @@ def show_multiview(cam_keys):
                 
                 # Resize to half screen width but maintain aspect ratio
                 h, w = frame.shape[:2]
-                half_width = SCREEN_WIDTH // 2
-                aspect = w / h
-                new_height = int(half_width / aspect)
+                half_width = max(SCREEN_WIDTH // 2, 320)  # Ensure positive width
+                aspect = w / h if h > 0 else 1.33  # Default to 4:3 if needed
+                new_height = max(int(half_width / aspect), 240)  # Ensure positive height
                 frame = cv2.resize(frame, (half_width, new_height))
                 
                 # If height is not equal to screen height, pad with black
@@ -101,7 +134,7 @@ def show_multiview(cam_keys):
                 frames.append(frame)
 
             combined = np.hstack(frames)
-            cv2.imshow('MultiView (press q to exit)', combined)
+            cv2.imshow(window_name, combined)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
@@ -112,8 +145,14 @@ def show_multiview(cam_keys):
     return threading.Thread(target=display)
 
 def show_single(cam_key):
-    global stop_thread
+    global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
     stop_thread = False
+    
+    # Ensure we have valid screen dimensions
+    if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
+        print("⚠️ Invalid screen dimensions, resetting to defaults")
+        SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
+    
     print(f"🔎 Fullscreen view: Camera {cam_key}")
     path = camera_paths[cam_key]
     cap = cv2.VideoCapture(path)
@@ -124,10 +163,15 @@ def show_single(cam_key):
     # Create window with Raspberry Pi optimized settings
     window_name = f'Camera {cam_key} (press q to exit)'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    
+    # Allow window system to initialize
+    time.sleep(0.5)
+    
     # Force window to be positioned at 0,0 and set size explicitly
     cv2.moveWindow(window_name, 0, 0)
     cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
-    # Set fullscreen after positioning
+    
+    # Set fullscreen
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     def display():
