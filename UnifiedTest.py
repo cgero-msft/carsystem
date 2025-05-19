@@ -83,75 +83,94 @@ class CameraUI(tk.Tk):
         self.control_frame = tk.Frame(self, bg="#333333", height=SCREEN_HEIGHT//3)
         self.control_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Create a frame for the camera buttons in a grid layout
-        self.camera_buttons_frame = tk.Frame(self.control_frame, bg="#333333")
-        self.camera_buttons_frame.place(relx=0.16, rely=0.5, anchor="center")
-        
         # Common button style parameters
-        button_width = 100
-        button_height = 100
         button_font = ("Arial", 16, "bold")
-        button_params = {
-            "font": button_font,
-            "width": 4,
-            "height": 1,
-        }
+        button_width = 6
+        button_height = 2
         
-        # Create 2x2 grid of camera buttons
-        # Top row - Cameras 1 and 2
-        self.cam1_btn = tk.Button(
-            self.camera_buttons_frame, 
-            text="1",
-            bg="#0064C8", fg="white",
-            activebackground="#0078F0", activeforeground="white",
-            command=lambda: self.select_camera("1"),
-            **button_params
-        )
-        self.cam1_btn.grid(row=0, column=0, padx=5, pady=5)
+        # Create camera controls (left side)
+        self.camera_controls_frame = tk.Frame(self.control_frame, bg="#333333")
+        self.camera_controls_frame.place(relx=0.2, rely=0.5, anchor="center")
         
-        self.cam2_btn = tk.Button(
-            self.camera_buttons_frame, 
-            text="2", 
-            bg="#0064C8", fg="white",
-            activebackground="#0078F0", activeforeground="white",
-            command=lambda: self.select_camera("2"),
-            **button_params
-        )
-        self.cam2_btn.grid(row=0, column=1, padx=5, pady=5)
+        # Camera control label
+        camera_label = tk.Label(self.camera_controls_frame, text="CAMERA", font=button_font, bg="#333333", fg="white")
+        camera_label.pack(pady=(0, 10))
         
-        # Bottom row - Camera 3 and Multi
-        self.cam3_btn = tk.Button(
-            self.camera_buttons_frame, 
-            text="3", 
-            bg="#0064C8", fg="white",
-            activebackground="#0078F0", activeforeground="white",
-            command=lambda: self.select_camera("3"),
-            **button_params
-        )
-        self.cam3_btn.grid(row=1, column=0, padx=5, pady=5)
+        # Camera control buttons
+        camera_buttons = [
+            ("1", "1", lambda: self.select_camera("1")),
+            ("2", "2", lambda: self.select_camera("2")),
+            ("3", "3", lambda: self.select_camera("3")),
+            ("Multi", "0", self.start_multiview_select)
+        ]
         
-        self.multi_btn = tk.Button(
-            self.camera_buttons_frame, 
-            text="Multi", 
-            bg="#0064C8", fg="white",
-            activebackground="#0078F0", activeforeground="white",
-            command=self.start_multiview_select,
-            **button_params
-        )
-        self.multi_btn.grid(row=1, column=1, padx=5, pady=5)
+        for text, key, command in camera_buttons:
+            btn = tk.Button(
+                self.camera_controls_frame,
+                text=text,
+                bg="#0064C8",
+                fg="white",
+                activebackground="#0078F0",
+                activeforeground="white",
+                font=button_font,
+                width=button_width,
+                height=1,
+                command=command
+            )
+            btn.pack(pady=5)
+            
+        # Create fan controls (right side)
+        self.fan_controls_frame = tk.Frame(self.control_frame, bg="#333333")
+        self.fan_controls_frame.place(relx=0.8, rely=0.5, anchor="center")
         
         # Fan control label
-        self.fan_label = tk.Label(self.control_frame, text="Fan: 0%", font=("Arial", 12), bg="#333333", fg="white")
-        self.fan_label.place(relx=0.5, rely=0.8, anchor="center")
+        fan_label = tk.Label(self.fan_controls_frame, text="FAN", font=button_font, bg="#333333", fg="white")
+        fan_label.pack(pady=(0, 10))
+        
+        # Fan control buttons
+        fan_buttons = [
+            ("0%", "a", 0x0000),
+            ("20%", "s", 0x3333),
+            ("40%", "d", 0x6666),
+            ("60%", "f", 0x9999),
+            ("80%", "g", 0xCCCC),
+            ("100%", "h", 0xFFFF)
+        ]
+        
+        for text, key, duty in fan_buttons:
+            btn = tk.Button(
+                self.fan_controls_frame,
+                text=text,
+                bg="#555555",
+                fg="white",
+                activebackground="#777777",
+                activeforeground="white",
+                font=button_font,
+                width=button_width,
+                height=1,
+                command=lambda d=duty, k=key, t=text: self.set_fan_speed(d, k, t)
+            )
+            btn.pack(pady=2)
+        
+        # Current fan speed display
+        self.fan_speed_label = tk.Label(
+            self.control_frame,
+            text="Current Fan: 0%",
+            font=("Arial", 14, "bold"),
+            bg="#333333",
+            fg="white"
+        )
+        self.fan_speed_label.place(relx=0.5, rely=0.9, anchor="center")
         
         # Multiview selection prompt (initially hidden)
         self.multiview_prompt = tk.Label(
-            self, 
-            text="Select two cameras for multiview", 
+            self,
+            text="Select two cameras for multiview",
             font=("Arial", 16, "bold"),
-            bg="black", fg="white"
+            bg="black",
+            fg="white"
         )
-        
+
     def select_camera(self, cam_key):
         """Handle camera selection"""
         if self.is_multiview_select_mode:
@@ -286,7 +305,7 @@ class CameraUI(tk.Tk):
             fan.duty_cycle = duty
             percent = int((duty / 0xFFFF) * 100)
             print(f"[KEY '{key.upper()}'] → Fan speed set to {percent}%")
-            self.fan_label.config(text=f"Fan: {percent}%")
+            self.fan_speed_label.config(text=f"Current Fan: {percent}%")
         
         # Fullscreen camera mode
         elif key in ['1', '2', '3'] and not self.is_multiview_select_mode:
@@ -299,6 +318,14 @@ class CameraUI(tk.Tk):
         # Select cameras for multiview
         elif self.is_multiview_select_mode and key in ['1', '2', '3']:
             self.select_camera(key)
+    
+    def set_fan_speed(self, duty, key, text):
+        """Set fan speed when button is clicked"""
+        global fan
+        fan.duty_cycle = duty
+        percent = int((duty / 0xFFFF) * 100)
+        print(f"[FAN] → Set to {percent}% (key: {key.upper()})")
+        self.fan_speed_label.config(text=f"Current Fan: {text}")
     
     def quit_app(self, event=None):
         """Clean up and exit application"""
