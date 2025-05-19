@@ -40,23 +40,52 @@ UI_STATE = {
     'last_touch': None
 }
 
-UI_REGIONS = {
-    'camera_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 90, 'x2': 110, 'y2': SCREEN_HEIGHT - 10},
-    'cam1_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 190, 'x2': 110, 'y2': SCREEN_HEIGHT - 110},
-    'cam2_btn': {'x1': 120, 'y1': SCREEN_HEIGHT - 190, 'x2': 220, 'y2': SCREEN_HEIGHT - 110},
-    'cam3_btn': {'x1': 230, 'y1': SCREEN_HEIGHT - 190, 'x2': 330, 'y2': SCREEN_HEIGHT - 110},
-    'multi_btn': {'x1': 340, 'y1': SCREEN_HEIGHT - 190, 'x2': 440, 'y2': SCREEN_HEIGHT - 110}
+# Update UI_REGIONS to position the camera button correctly
+def define_ui_regions():
+    # Calculate the black bar area
+    bottom_bar_height = SCREEN_HEIGHT - (SCREEN_HEIGHT // 3 * 2)  # 1/3 of screen height
+    bottom_bar_y_start = SCREEN_HEIGHT // 3 * 2  # Start at 2/3 down the screen
+    
+    # Position camera button at left third horizontally and centered vertically in black bar
+    btn_width = 100
+    btn_height = 60
+    left_third_x = SCREEN_WIDTH // 3 - btn_width // 2  # Center of left third
+    vertical_center_y = bottom_bar_y_start + (bottom_bar_height // 2) - (btn_height // 2)
+    
+    camera_btn = {
+        'x1': left_third_x, 
+        'y1': vertical_center_y, 
+        'x2': left_third_x + btn_width, 
+        'y2': vertical_center_y + btn_height
+    }
+    
+    # Camera selection menu (position below the main camera button)
+    menu_y = vertical_center_y - 100  # Position above the main button
+    cam1_btn = {'x1': left_third_x - 180, 'y1': menu_y, 'x2': left_third_x - 100, 'y2': menu_y + btn_height}
+    cam2_btn = {'x1': left_third_x - 90, 'y1': menu_y, 'x2': left_third_x - 10, 'y2': menu_y + btn_height}
+    cam3_btn = {'x1': left_third_x, 'y1': menu_y, 'x2': left_third_x + 80, 'y2': menu_y + btn_height}
+    multi_btn = {'x1': left_third_x + 90, 'y1': menu_y, 'x2': left_third_x + 170, 'y2': menu_y + btn_height}
+    
+    return {
+        'camera_btn': camera_btn,
+        'cam1_btn': cam1_btn,
+        'cam2_btn': cam2_btn,
+        'cam3_btn': cam3_btn,
+        'multi_btn': multi_btn
 }
+
+# Replace the current UI_REGIONS with calculated regions
+UI_REGIONS = define_ui_regions()
 
 def draw_button(frame, region, text, icon=None, active=False):
     """Draw a button on the frame."""
     x1, y1 = region['x1'], region['y1']
     x2, y2 = region['x2'], region['y2']
 
-    # Draw button background
-    color = (0, 120, 255) if active else (0, 70, 150)
+    # Draw button background with brighter colors
+    color = (0, 150, 255) if active else (0, 100, 200)
     cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 100, 200), 2)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
 
     # Draw text
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -64,6 +93,16 @@ def draw_button(frame, region, text, icon=None, active=False):
     text_x = x1 + (x2 - x1 - text_size[0]) // 2
     text_y = y1 + (y2 - y1 + text_size[1]) // 2
     cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
+    
+    # Draw camera icon if specified
+    if icon == "camera":
+        icon_size = 20
+        icon_x = x1 + 10
+        icon_y = text_y - 15
+        
+        # Simple camera icon
+        cv2.rectangle(frame, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size), (255, 255, 255), 1)
+        cv2.circle(frame, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//4, (255, 255, 255), 1))
 
 
 def draw_multiview_selection_prompt(frame):
@@ -189,6 +228,9 @@ def show_multiview(cam_keys):
         window_name = 'Camera View'
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         
+        # Important! Set mouse callback for touch events
+        cv2.setMouseCallback(window_name, handle_touch)
+        
         # Allow window system to initialize
         time.sleep(0.5)
         
@@ -273,6 +315,9 @@ def show_single(cam_key):
     window_name = 'Camera View'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    
+    # Important! Set mouse callback for touch events
+    cv2.setMouseCallback(window_name, handle_touch)
     
     # Show initial black background while loading
     black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
