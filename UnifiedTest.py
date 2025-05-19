@@ -83,30 +83,62 @@ class CameraUI(tk.Tk):
         self.control_frame = tk.Frame(self, bg="#333333", height=SCREEN_HEIGHT//3)
         self.control_frame.grid(row=1, column=0, sticky="nsew")
         
-        # Camera controls
-        self.camera_btn = tk.Button(
-            self.control_frame, 
-            text="Camera", 
-            font=("Arial", 14, "bold"),
+        # Create a frame for the camera buttons in a grid layout
+        self.camera_buttons_frame = tk.Frame(self.control_frame, bg="#333333")
+        self.camera_buttons_frame.place(relx=0.16, rely=0.5, anchor="center")
+        
+        # Common button style parameters
+        button_width = 50
+        button_height = 50
+        button_font = ("Arial", 14, "bold")
+        button_params = {
+            "font": button_font,
+            "width": 4,
+            "height": 1,
+        }
+        
+        # Create 2x2 grid of camera buttons
+        # Top row - Cameras 1 and 2
+        self.cam1_btn = tk.Button(
+            self.camera_buttons_frame, 
+            text="1",
             bg="#0064C8", fg="white",
             activebackground="#0078F0", activeforeground="white",
-            command=self.toggle_camera_menu
+            command=lambda: self.select_camera("1"),
+            **button_params
         )
-        self.camera_btn.place(relx=0.16, rely=0.5, anchor="center", width=100, height=60)
+        self.cam1_btn.grid(row=0, column=0, padx=5, pady=5)
         
-        # Camera selection menu (initially hidden)
-        self.menu_frame = tk.Frame(self.control_frame, bg="#222222", bd=2, relief="raised")
+        self.cam2_btn = tk.Button(
+            self.camera_buttons_frame, 
+            text="2", 
+            bg="#0064C8", fg="white",
+            activebackground="#0078F0", activeforeground="white",
+            command=lambda: self.select_camera("2"),
+            **button_params
+        )
+        self.cam2_btn.grid(row=0, column=1, padx=5, pady=5)
         
-        # Camera selection buttons
-        self.cam1_btn = tk.Button(self.menu_frame, text="Cam 1", command=lambda: self.select_camera("1"))
-        self.cam2_btn = tk.Button(self.menu_frame, text="Cam 2", command=lambda: self.select_camera("2"))
-        self.cam3_btn = tk.Button(self.menu_frame, text="Cam 3", command=lambda: self.select_camera("3"))
-        self.multi_btn = tk.Button(self.menu_frame, text="Multi", command=self.start_multiview_select)
+        # Bottom row - Camera 3 and Multi
+        self.cam3_btn = tk.Button(
+            self.camera_buttons_frame, 
+            text="3", 
+            bg="#0064C8", fg="white",
+            activebackground="#0078F0", activeforeground="white",
+            command=lambda: self.select_camera("3"),
+            **button_params
+        )
+        self.cam3_btn.grid(row=1, column=0, padx=5, pady=5)
         
-        self.cam1_btn.pack(side="left", padx=5, pady=5)
-        self.cam2_btn.pack(side="left", padx=5, pady=5)
-        self.cam3_btn.pack(side="left", padx=5, pady=5)
-        self.multi_btn.pack(side="left", padx=5, pady=5)
+        self.multi_btn = tk.Button(
+            self.camera_buttons_frame, 
+            text="Multi", 
+            bg="#0064C8", fg="white",
+            activebackground="#0078F0", activeforeground="white",
+            command=self.start_multiview_select,
+            **button_params
+        )
+        self.multi_btn.grid(row=1, column=1, padx=5, pady=5)
         
         # Fan control label
         self.fan_label = tk.Label(self.control_frame, text="Fan: 0%", font=("Arial", 12), bg="#333333", fg="white")
@@ -120,17 +152,8 @@ class CameraUI(tk.Tk):
             bg="black", fg="white"
         )
         
-    def toggle_camera_menu(self):
-        """Toggle visibility of camera selection menu"""
-        if self.menu_frame.winfo_ismapped():
-            self.menu_frame.place_forget()
-        else:
-            self.menu_frame.place(relx=0.16, rely=0.3, anchor="center")
-            
     def select_camera(self, cam_key):
         """Handle camera selection"""
-        self.menu_frame.place_forget()
-        
         if self.is_multiview_select_mode:
             if cam_key not in self.multiview_selection:
                 self.multiview_selection.append(cam_key)
@@ -146,7 +169,6 @@ class CameraUI(tk.Tk):
     
     def start_multiview_select(self):
         """Start multiview camera selection"""
-        self.menu_frame.place_forget()
         self.multiview_selection = []
         self.is_multiview_select_mode = True
         self.multiview_prompt.place(relx=0.5, rely=0.5, anchor="center")
