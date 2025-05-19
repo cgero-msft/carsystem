@@ -19,16 +19,30 @@ stop_thread = False
 display_thread = None
 multiview_selection = []
 
+# Get system screen resolution
+def get_screen_resolution():
+    # Create a temporary window to get screen info
+    temp = np.zeros((1, 1, 3), dtype=np.uint8)
+    cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    screen_width = cv2.getWindowImageRect('temp')[2]
+    screen_height = cv2.getWindowImageRect('temp')[3]
+    cv2.destroyWindow('temp')
+    return screen_width, screen_height
+
+# Use a global variable to store screen dimensions
+SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
+
 def get_single_frame(path):
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
         print(f"❌ Could not open {path}")
-        return np.zeros((450, 800, 3), dtype=np.uint8)
+        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
     ret, frame = cap.read()
     cap.release()
     if not ret:
-        return np.zeros((450, 800, 3), dtype=np.uint8)
-    return cv2.resize(frame, (800, 450))  # Larger size for better visibility on 1024x600 display
+        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+    return cv2.resize(frame, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 def show_multiview(cam_keys):
     global stop_thread
@@ -40,10 +54,13 @@ def show_multiview(cam_keys):
         for k in cam_keys:
             cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 512)  # Half of 1024 for side-by-side view
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 384)  # Maintains 4:3 aspect ratio
+            # Keep original resolution, we'll resize frames later
             cap.set(cv2.CAP_PROP_FPS, 30)
             caps.append(cap)
+
+        # Create a full screen window
+        cv2.namedWindow('MultiView (press q to exit)', cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty('MultiView (press q to exit)', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         while not stop_thread:
             frames = []
@@ -51,7 +68,21 @@ def show_multiview(cam_keys):
                 ret, frame = cap.read()
                 if not ret:
                     print(f"⚠️ Camera {k} failed to read")
-                    frame = np.zeros((384, 512, 3), dtype=np.uint8)
+                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                
+                # Resize to half screen width but maintain aspect ratio
+                h, w = frame.shape[:2]
+                half_width = SCREEN_WIDTH // 2
+                aspect = w / h
+                new_height = int(half_width / aspect)
+                frame = cv2.resize(frame, (half_width, new_height))
+                
+                # If height is not equal to screen height, pad with black
+                if new_height < SCREEN_HEIGHT:
+                    pad_top = (SCREEN_HEIGHT - new_height) // 2
+                    pad_bottom = SCREEN_HEIGHT - new_height - pad_top
+                    frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
+                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
                 frames.append(frame)
 
             combined = np.hstack(frames)
@@ -74,21 +105,51 @@ def show_single(cam_key):
     if not cap.isOpened():
         print(f"❌ Failed to open {path}")
         return None
-        
-    # Set optimal resolution for 1024x600 display
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+
+    # Create a full screen window
+    window_name = f'Camera {cam_key} (press q to exit)'
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     def display():
         while not stop_thread:
             ret, frame = cap.read()
             if not ret:
                 continue
-            cv2.imshow(f'Camera {cam_key} (press q to exit)', frame)
+                
+            # Keep aspect ratio when resizing to full screen
+            h, w = frame.shape[:2]
+            aspect = w / h
+            
+            if SCREEN_WIDTH / SCREEN_HEIGHT > aspect:
+                # Screen is wider than video
+                new_h = SCREEN_HEIGHT
+                new_w = int(new_h * aspect)
+                frame = cv2.resize(frame, (new_w, new_h))
+                
+                # Center horizontally
+                if new_w < SCREEN_WIDTH:
+                    pad_left = (SCREEN_WIDTH - new_w) // 2
+                    pad_right = SCREEN_WIDTH - new_w - pad_left
+                    frame = cv2.copyMakeBorder(frame, 0, 0, pad_left, pad_right, 
+                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
+            else:
+                # Screen is taller than video
+                new_w = SCREEN_WIDTH
+                new_h = int(new_w / aspect)
+                frame = cv2.resize(frame, (new_w, new_h))
+                
+                # Center vertically
+                if new_h < SCREEN_HEIGHT:
+                    pad_top = (SCREEN_HEIGHT - new_h) // 2
+                    pad_bottom = SCREEN_HEIGHT - new_h - pad_top
+                    frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
+                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
+                    
+            cv2.imshow(window_name, frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+                
         cap.release()
         cv2.destroyAllWindows()
 
