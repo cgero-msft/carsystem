@@ -182,33 +182,50 @@ def show_single(cam_key):
                 
             # Keep aspect ratio when resizing to full screen
             h, w = frame.shape[:2]
-            aspect = w / h
             
-            if SCREEN_WIDTH / SCREEN_HEIGHT > aspect:
+            # Safety check for frame dimensions
+            if h <= 0 or w <= 0:
+                print("⚠️ Invalid frame dimensions, using default frame")
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                h, w = frame.shape[:2]
+            
+            # Calculate aspect ratio with safety check
+            aspect = w / h if h > 0 else 1.33
+            
+            # Make sure screen dimensions are positive
+            screen_w = max(SCREEN_WIDTH, 640)
+            screen_h = max(SCREEN_HEIGHT, 480)
+            
+            # Calculate new dimensions while maintaining aspect ratio
+            if screen_w / screen_h > aspect:
                 # Screen is wider than video
-                new_h = SCREEN_HEIGHT
+                new_h = screen_h
                 new_w = int(new_h * aspect)
-                frame = cv2.resize(frame, (new_w, new_h))
-                
-                # Center horizontally
-                if new_w < SCREEN_WIDTH:
-                    pad_left = (SCREEN_WIDTH - new_w) // 2
-                    pad_right = SCREEN_WIDTH - new_w - pad_left
-                    frame = cv2.copyMakeBorder(frame, 0, 0, pad_left, pad_right, 
-                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
             else:
                 # Screen is taller than video
-                new_w = SCREEN_WIDTH
+                new_w = screen_w
                 new_h = int(new_w / aspect)
-                frame = cv2.resize(frame, (new_w, new_h))
+            
+            # Ensure dimensions are valid (at least 1 pixel)
+            new_w = max(new_w, 1)
+            new_h = max(new_h, 1)
+            
+            # Resize frame with safety checks
+            frame = cv2.resize(frame, (new_w, new_h))
+            
+            # Center frame if needed
+            if new_w < screen_w:
+                pad_left = (screen_w - new_w) // 2
+                pad_right = screen_w - new_w - pad_left
+                frame = cv2.copyMakeBorder(frame, 0, 0, pad_left, pad_right, 
+                                         cv2.BORDER_CONSTANT, value=[0, 0, 0])
+            
+            if new_h < screen_h:
+                pad_top = (screen_h - new_h) // 2
+                pad_bottom = screen_h - new_h - pad_top
+                frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
+                                         cv2.BORDER_CONSTANT, value=[0, 0, 0])
                 
-                # Center vertically
-                if new_h < SCREEN_HEIGHT:
-                    pad_top = (SCREEN_HEIGHT - new_h) // 2
-                    pad_bottom = SCREEN_HEIGHT - new_h - pad_top
-                    frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
-                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
-                    
             cv2.imshow(window_name, frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
