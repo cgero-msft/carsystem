@@ -129,9 +129,36 @@ def show_single(cam_key):
             if not ret:
                 time.sleep(0.1)
                 continue
-                
-            # No resizing - just display the frame as is in fullscreen
-            cv2.imshow(window_name, frame)
+            
+            # Get original frame dimensions
+            frame_h, frame_w = frame.shape[:2]
+            
+            # Create a black background image with screen dimensions
+            background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+            
+            # Calculate horizontal centering (if frame is narrower than screen)
+            if frame_w < SCREEN_WIDTH:
+                x_offset = (SCREEN_WIDTH - frame_w) // 2
+            else:
+                # If frame is wider than screen, crop it centered
+                x_offset = 0
+                crop_start = (frame_w - SCREEN_WIDTH) // 2
+                frame = frame[:, crop_start:crop_start+SCREEN_WIDTH]
+                frame_w = SCREEN_WIDTH
+            
+            # Position at the top of the screen
+            y_offset = 0
+            
+            # If frame is taller than screen, crop the bottom
+            if frame_h > SCREEN_HEIGHT:
+                frame = frame[:SCREEN_HEIGHT, :]
+                frame_h = SCREEN_HEIGHT
+            
+            # Place the frame on the black background
+            background[y_offset:y_offset+frame_h, x_offset:x_offset+frame_w] = frame
+            
+            # Display the result
+            cv2.imshow(window_name, background)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
                 
