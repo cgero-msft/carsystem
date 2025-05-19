@@ -338,7 +338,6 @@ def draw_ui(frame):
     if UI_STATE['multiview_select']:
         draw_multiview_selection_prompt(frame)
 
-
 def handle_touch(event, x, y, flags, param):
     """Handle mouse/touch events."""
     global UI_STATE, multiview_selection, current_mode
