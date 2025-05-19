@@ -481,22 +481,28 @@ def show_single(cam_key):
 
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
-
-    # Mark old thread for stopping but don't destroy window
-    stop_thread = True
-    if display_thread and display_thread.is_alive():
-        # Show a black frame before switching
-        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.imshow('Camera View', black_bg)
-        cv2.waitKey(1)
-        
-        # Now wait for thread to finish
-        display_thread.join()
-
+    
+    # Store current mode before changing
+    old_mode = current_mode
     current_mode = mode
 
+    # Stop old thread without joining it (avoids thread join error)
+    if display_thread and display_thread.is_alive():
+        # Signal thread to stop
+        stop_thread = True
+        
+        # Don't try to join from the same thread
+        current_thread_id = threading.get_ident()
+        if display_thread.ident != current_thread_id:
+            # Only join if we're not in the same thread
+            display_thread.join()
+        else:
+            # If we're in the same thread, just set the flag and continue
+            print("Thread switch from callback - skipping join")
+    
+    # Start new thread based on mode
+    stop_thread = False
+    
     if mode == 'multi':
         display_thread = show_multiview(cam_keys)
     elif mode in ['1', '2', '3']:
@@ -505,6 +511,9 @@ def switch_mode(mode, cam_keys=None):
         return
 
     display_thread.start()
+    
+    # If we're switching from a callback (same thread), 
+    # old thread will be cleaned up in the next UI cycle
 
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
