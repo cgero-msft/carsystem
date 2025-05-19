@@ -61,7 +61,7 @@ def show_multiview(cam_keys):
             caps.append(cap)
 
         # Create window with Raspberry Pi optimized settings
-        window_name = 'MultiView (press q to exit)'
+        window_name = 'Camera View'
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         
         # Allow window system to initialize
@@ -73,8 +73,16 @@ def show_multiview(cam_keys):
         
         # Set fullscreen 
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        
+        # Show initial black background while loading
+        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+        cv2.imshow(window_name, black_bg)
+        cv2.waitKey(1)
 
         while not stop_thread:
+            # Create a fresh black background for each frame
+            background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+            
             frames = []
             for cap, k in zip(caps, cam_keys):
                 ret, frame = cap.read()
@@ -82,29 +90,45 @@ def show_multiview(cam_keys):
                     print(f"⚠️ Camera {k} failed to read")
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 
-                # Resize to half screen width but maintain aspect ratio
-                h, w = frame.shape[:2]
-                half_width = max(SCREEN_WIDTH // 2, 320)  # Ensure positive width
-                aspect = w / h if h > 0 else 1.33  # Default to 4:3 if needed
-                new_height = max(int(half_width / aspect), 240)  # Ensure positive height
-                frame = cv2.resize(frame, (half_width, new_height))
+                # Calculate target height - use the same calculation method for all modes
+                target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
                 
-                # If height is not equal to screen height, pad with black
-                if new_height < SCREEN_HEIGHT:
-                    pad_top = (SCREEN_HEIGHT - new_height) // 2
-                    pad_bottom = SCREEN_HEIGHT - new_height - pad_top
-                    frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
-                                             cv2.BORDER_CONSTANT, value=[0, 0, 0])
+                # Resize to half screen width and target height maintaining aspect ratio
+                h, w = frame.shape[:2]
+                half_width = SCREEN_WIDTH // 2
+                
+                # Calculate scaling factors
+                scale_w = half_width / w
+                scale_h = target_height / h
+                scale = min(scale_w, scale_h)  # Maintain aspect ratio
+                
+                # Calculate new dimensions
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+                
+                # Resize the frame
+                frame = cv2.resize(frame, (new_w, new_h))
+                
                 frames.append(frame)
 
-            combined = np.hstack(frames)
-            cv2.imshow(window_name, combined)
+            # Put frames side by side with horizontal centering
+            combined_width = frames[0].shape[1] + frames[1].shape[1]
+            x_offset = (SCREEN_WIDTH - combined_width) // 2
+            
+            # Position frames at the top with consistent height
+            y_offset = 0
+            
+            # Place frames on background
+            for i, frame in enumerate(frames):
+                x_pos = x_offset + (i * frames[0].shape[1])
+                background[y_offset:y_offset+frame.shape[0], x_pos:x_pos+frame.shape[1]] = frame
+
+            cv2.imshow(window_name, background)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
         for cap in caps:
             cap.release()
-        cv2.destroyAllWindows()
 
     return threading.Thread(target=display)
 
@@ -119,9 +143,15 @@ def show_single(cam_key):
         print(f"❌ Failed to open {path}")
         return None
 
-    window_name = f'Camera {cam_key} (press q to exit)'
+    # Use the same window name as multiview for persistence
+    window_name = 'Camera View'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    
+    # Show initial black background while loading
+    black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+    cv2.imshow(window_name, black_bg)
+    cv2.waitKey(1)
 
     def display():
         while not stop_thread:
@@ -130,32 +160,35 @@ def show_single(cam_key):
                 time.sleep(0.1)
                 continue
             
+            # Calculate target height - use the same calculation method for all modes
+            target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
+            
             # Get original frame dimensions
-            frame_h, frame_w = frame.shape[:2]
+            h, w = frame.shape[:2]
+            
+            # Calculate scaling factors
+            scale_w = SCREEN_WIDTH / w
+            scale_h = target_height / h
+            scale = min(scale_w, scale_h)  # Maintain aspect ratio
+            
+            # Calculate new dimensions
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            
+            # Resize the frame
+            frame = cv2.resize(frame, (new_w, new_h))
             
             # Create a black background image with screen dimensions
             background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
             
-            # Calculate horizontal centering (if frame is narrower than screen)
-            if frame_w < SCREEN_WIDTH:
-                x_offset = (SCREEN_WIDTH - frame_w) // 2
-            else:
-                # If frame is wider than screen, crop it centered
-                x_offset = 0
-                crop_start = (frame_w - SCREEN_WIDTH) // 2
-                frame = frame[:, crop_start:crop_start+SCREEN_WIDTH]
-                frame_w = SCREEN_WIDTH
+            # Calculate horizontal centering
+            x_offset = (SCREEN_WIDTH - new_w) // 2
             
             # Position at the top of the screen
             y_offset = 0
             
-            # If frame is taller than screen, crop the bottom
-            if frame_h > SCREEN_HEIGHT:
-                frame = frame[:SCREEN_HEIGHT, :]
-                frame_h = SCREEN_HEIGHT
-            
             # Place the frame on the black background
-            background[y_offset:y_offset+frame_h, x_offset:x_offset+frame_w] = frame
+            background[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame
             
             # Display the result
             cv2.imshow(window_name, background)
@@ -163,15 +196,23 @@ def show_single(cam_key):
                 break
                 
         cap.release()
-        cv2.destroyAllWindows()
 
     return threading.Thread(target=display)
 
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
 
+    # Mark old thread for stopping but don't destroy window
     stop_thread = True
     if display_thread and display_thread.is_alive():
+        # Show a black frame before switching
+        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+        cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.imshow('Camera View', black_bg)
+        cv2.waitKey(1)
+        
+        # Now wait for thread to finish
         display_thread.join()
 
     current_mode = mode
