@@ -481,39 +481,45 @@ def show_single(cam_key):
 
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
-    
-    # Store current mode before changing
-    old_mode = current_mode
-    current_mode = mode
 
-    # Stop old thread without joining it (avoids thread join error)
-    if display_thread and display_thread.is_alive():
-        # Signal thread to stop
-        stop_thread = True
-        
-        # Don't try to join from the same thread
-        current_thread_id = threading.get_ident()
-        if display_thread.ident != current_thread_id:
-            # Only join if we're not in the same thread
-            display_thread.join()
-        else:
-            # If we're in the same thread, just set the flag and continue
-            print("Thread switch from callback - skipping join")
+    # Avoid joining thread when called from UI callback
+    is_from_callback = threading.current_thread() == display_thread
     
-    # Start new thread based on mode
-    stop_thread = False
+    # Mark current thread for stopping
+    stop_thread = True
     
+    # Store the old thread to clean up later (if needed)
+    old_thread = display_thread
+    
+    # Update current mode
+    current_mode = mode
+    
+    # Create new thread based on selected mode
     if mode == 'multi':
+        if not cam_keys or len(cam_keys) != 2:
+            print("⚠️ Need exactly 2 cameras for multiview")
+            cam_keys = ['1', '2']  # Default to cameras 1 and 2
         display_thread = show_multiview(cam_keys)
     elif mode in ['1', '2', '3']:
         display_thread = show_single(mode)
     else:
         return
-
+        
+    # Start the new display thread
+    stop_thread = False
     display_thread.start()
     
-    # If we're switching from a callback (same thread), 
-    # old thread will be cleaned up in the next UI cycle
+    # Only try to join the old thread if:
+    # 1. It exists
+    # 2. It's not the current thread
+    # 3. It's still alive
+    if old_thread and not is_from_callback and old_thread.is_alive():
+        try:
+            old_thread.join(timeout=1.0)  # Use timeout to prevent blocking
+        except RuntimeError:
+            # If we still get an error, just let it go
+            print("⚠️ Thread cleanup skipped")
+            pass
 
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
