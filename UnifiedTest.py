@@ -19,50 +19,14 @@ stop_thread = False
 display_thread = None
 multiview_selection = []
 
-# Get system screen resolution - Pi-specific approach
+# Hardcode a reasonable default resolution that works on Pi displays
+SCREEN_WIDTH = 1024
+SCREEN_HEIGHT = 600
+
+# Skip the detection logic since it's returning incorrect values
 def get_screen_resolution():
-    try:
-        # Try to use Pi-specific method if available
-        import subprocess
-        output = subprocess.check_output("tvservice -s", shell=True).decode()
-        resolution = output.split(",")[1].split(" ")[2]
-        width, height = map(int, resolution.split("x"))
-        print(f"📺 Detected screen resolution: {width}x{height}")
-        return width, height
-    except:
-        # First fallback - try with xrandr
-        try:
-            import subprocess
-            output = subprocess.check_output("xrandr | grep current", shell=True).decode()
-            parts = output.split(',')[0].split()
-            width = int(parts[parts.index("current") + 1])
-            height = int(parts[parts.index("current") + 3])
-            print(f"📺 Detected screen resolution using xrandr: {width}x{height}")
-            return width, height
-        except:
-            # Second fallback using CV2 method
-            try:
-                print("📺 Using OpenCV fallback resolution detection")
-                temp = np.zeros((1, 1, 3), dtype=np.uint8)
-                cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
-                cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                cv2.imshow('temp', temp)
-                cv2.waitKey(100)  # Wait a bit for window to initialize
-                rect = cv2.getWindowImageRect('temp')
-                screen_width = rect[2]
-                screen_height = rect[3]
-                cv2.destroyWindow('temp')
-                
-                # Check if values are valid
-                if screen_width > 0 and screen_height > 0:
-                    print(f"📺 Detected screen resolution: {screen_width}x{screen_height}")
-                    return screen_width, screen_height
-                else:
-                    raise ValueError("Invalid screen dimensions")
-            except:
-                # Last resort - hardcoded values for Raspberry Pi
-                print("📺 Using default Raspberry Pi resolution (1024x600)")
-                return 1024, 600  # Common Pi display resolution
+    print(f"📺 Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    return SCREEN_WIDTH, SCREEN_HEIGHT
 
 # Use a global variable to store screen dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
@@ -145,13 +109,8 @@ def show_multiview(cam_keys):
     return threading.Thread(target=display)
 
 def show_single(cam_key):
-    global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
+    global stop_thread
     stop_thread = False
-    
-    # Ensure we have valid screen dimensions
-    if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
-        print("⚠️ Invalid screen dimensions, resetting to defaults")
-        SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
     
     print(f"🔎 Fullscreen view: Camera {cam_key}")
     path = camera_paths[cam_key]
@@ -160,72 +119,18 @@ def show_single(cam_key):
         print(f"❌ Failed to open {path}")
         return None
 
-    # Create window with Raspberry Pi optimized settings
     window_name = f'Camera {cam_key} (press q to exit)'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    
-    # Allow window system to initialize
-    time.sleep(0.5)
-    
-    # Force window to be positioned at 0,0 and set size explicitly
-    cv2.moveWindow(window_name, 0, 0)
-    cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
-    
-    # Set fullscreen
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     def display():
         while not stop_thread:
             ret, frame = cap.read()
             if not ret:
+                time.sleep(0.1)
                 continue
                 
-            # Keep aspect ratio when resizing to full screen
-            h, w = frame.shape[:2]
-            
-            # Safety check for frame dimensions
-            if h <= 0 or w <= 0:
-                print("⚠️ Invalid frame dimensions, using default frame")
-                frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                h, w = frame.shape[:2]
-            
-            # Calculate aspect ratio with safety check
-            aspect = w / h if h > 0 else 1.33
-            
-            # Make sure screen dimensions are positive
-            screen_w = max(SCREEN_WIDTH, 640)
-            screen_h = max(SCREEN_HEIGHT, 480)
-            
-            # Calculate new dimensions while maintaining aspect ratio
-            if screen_w / screen_h > aspect:
-                # Screen is wider than video
-                new_h = screen_h
-                new_w = int(new_h * aspect)
-            else:
-                # Screen is taller than video
-                new_w = screen_w
-                new_h = int(new_w / aspect)
-            
-            # Ensure dimensions are valid (at least 1 pixel)
-            new_w = max(new_w, 1)
-            new_h = max(new_h, 1)
-            
-            # Resize frame with safety checks
-            frame = cv2.resize(frame, (new_w, new_h))
-            
-            # Center frame if needed
-            if new_w < screen_w:
-                pad_left = (screen_w - new_w) // 2
-                pad_right = screen_w - new_w - pad_left
-                frame = cv2.copyMakeBorder(frame, 0, 0, pad_left, pad_right, 
-                                         cv2.BORDER_CONSTANT, value=[0, 0, 0])
-            
-            if new_h < screen_h:
-                pad_top = (screen_h - new_h) // 2
-                pad_bottom = screen_h - new_h - pad_top
-                frame = cv2.copyMakeBorder(frame, pad_top, pad_bottom, 0, 0, 
-                                         cv2.BORDER_CONSTANT, value=[0, 0, 0])
-                
+            # No resizing - just display the frame as is in fullscreen
             cv2.imshow(window_name, frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
