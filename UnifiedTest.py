@@ -7,6 +7,129 @@ from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
 
+##### UI SECTION #####
+UI_STATE = {
+    'camera_menu_open': False,
+    'multiview_select': False,
+    'last_touch': None
+}
+
+UI_REGIONS = {
+    'camera_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 90, 'x2': 110, 'y2': SCREEN_HEIGHT - 10},
+    'cam1_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 190, 'x2': 110, 'y2': SCREEN_HEIGHT - 110},
+    'cam2_btn': {'x1': 120, 'y1': SCREEN_HEIGHT - 190, 'x2': 220, 'y2': SCREEN_HEIGHT - 110},
+    'cam3_btn': {'x1': 230, 'y1': SCREEN_HEIGHT - 190, 'x2': 330, 'y2': SCREEN_HEIGHT - 110},
+    'multi_btn': {'x1': 340, 'y1': SCREEN_HEIGHT - 190, 'x2': 440, 'y2': SCREEN_HEIGHT - 110}
+}
+
+def draw_button(frame, region, text, icon=None, active=False):
+    """Draw a button on the frame."""
+    x1, y1 = region['x1'], region['y1']
+    x2, y2 = region['x2'], region['y2']
+
+    # Draw button background
+    color = (0, 120, 255) if active else (0, 70, 150)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 100, 200), 2)
+
+    # Draw text
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 0.8, 2)[0]
+    text_x = x1 + (x2 - x1 - text_size[0]) // 2
+    text_y = y1 + (y2 - y1 + text_size[1]) // 2
+    cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
+
+
+def draw_multiview_selection_prompt(frame):
+    """Draw the multiview selection prompt."""
+    text = "Select two cameras for multiview"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
+    text_x = SCREEN_WIDTH // 2 - text_size[0] // 2
+    text_y = SCREEN_HEIGHT // 2 - 40
+    cv2.putText(frame, text, (text_x, text_y), font, 1.0, (255, 255, 255), 2)
+
+
+def is_point_in_region(x, y, region):
+    """Check if a point is inside a region."""
+    return region['x1'] <= x <= region['x2'] and region['y1'] <= y <= region['y2']
+
+
+def draw_ui(frame):
+    """Draw the UI elements on the frame."""
+    # Draw separator line
+    cv2.line(frame, (0, SCREEN_HEIGHT - 100), (SCREEN_WIDTH, SCREEN_HEIGHT - 100), (80, 80, 80), 2)
+
+    # Draw camera button
+    if not UI_STATE['camera_menu_open']:
+        draw_button(frame, UI_REGIONS['camera_btn'], "Camera", "camera", active=False)
+    else:
+        # Draw expanded camera menu
+        draw_button(frame, UI_REGIONS['cam1_btn'], "Cam1", active=False)
+        draw_button(frame, UI_REGIONS['cam2_btn'], "Cam2", active=False)
+        draw_button(frame, UI_REGIONS['cam3_btn'], "Cam3", active=False)
+        draw_button(frame, UI_REGIONS['multi_btn'], "Multi", active=UI_STATE['multiview_select'])
+
+    # Highlight multiview selection if active
+    if UI_STATE['multiview_select']:
+        draw_multiview_selection_prompt(frame)
+
+
+def simulate_keystroke(key):
+    """Simulate a keystroke."""
+    print(f"Simulating keystroke: {key}")
+    on_press(keyboard.KeyCode.from_char(key))
+
+
+def handle_touch(event, x, y, flags, param):
+    """Handle mouse/touch events."""
+    global UI_STATE, multiview_selection, current_mode
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        print(f"Touch at ({x}, {y})")
+        UI_STATE['last_touch'] = (x, y)
+
+        # Check if touch is in the camera button
+        if is_point_in_region(x, y, UI_REGIONS['camera_btn']):
+            UI_STATE['camera_menu_open'] = not UI_STATE['camera_menu_open']
+            print(f"Camera menu {'opened' if UI_STATE['camera_menu_open'] else 'closed'}")
+            return
+
+        # Handle camera menu selections
+        if UI_STATE['camera_menu_open']:
+            if is_point_in_region(x, y, UI_REGIONS['cam1_btn']):
+                simulate_keystroke('1')
+                UI_STATE['camera_menu_open'] = False
+                return
+            elif is_point_in_region(x, y, UI_REGIONS['cam2_btn']):
+                simulate_keystroke('2')
+                UI_STATE['camera_menu_open'] = False
+                return
+            elif is_point_in_region(x, y, UI_REGIONS['cam3_btn']):
+                simulate_keystroke('3')
+                UI_STATE['camera_menu_open'] = False
+                return
+            elif is_point_in_region(x, y, UI_REGIONS['multi_btn']):
+                print("📺 Select two cameras for multiview")
+                multiview_selection = []
+                UI_STATE['multiview_select'] = True
+                return
+
+        # Handle multiview camera selection
+        if UI_STATE['multiview_select']:
+            for cam, region in [('1', UI_REGIONS['cam1_btn']), ('2', UI_REGIONS['cam2_btn']), ('3', UI_REGIONS['cam3_btn'])]:
+                if is_point_in_region(x, y, region):
+                    if cam not in multiview_selection:
+                        multiview_selection.append(cam)
+                        print(f"✅ Selected Camera {cam}")
+                    if len(multiview_selection) == 2:
+                        simulate_keystroke('0')  # Simulate multiview keystroke
+                        for cam in multiview_selection:
+                            simulate_keystroke(cam)
+                        UI_STATE['multiview_select'] = False
+                    return
+
+
 ##### CAMERA SECTION #####
 camera_paths = {
     '1': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.4:1.0-video-index0',
@@ -304,124 +427,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-##### UI SECTION #####
-UI_STATE = {
-    'camera_menu_open': False,
-    'multiview_select': False,
-    'last_touch': None
-}
-
-UI_REGIONS = {
-    'camera_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 90, 'x2': 110, 'y2': SCREEN_HEIGHT - 10},
-    'cam1_btn': {'x1': 10, 'y1': SCREEN_HEIGHT - 190, 'x2': 110, 'y2': SCREEN_HEIGHT - 110},
-    'cam2_btn': {'x1': 120, 'y1': SCREEN_HEIGHT - 190, 'x2': 220, 'y2': SCREEN_HEIGHT - 110},
-    'cam3_btn': {'x1': 230, 'y1': SCREEN_HEIGHT - 190, 'x2': 330, 'y2': SCREEN_HEIGHT - 110},
-    'multi_btn': {'x1': 340, 'y1': SCREEN_HEIGHT - 190, 'x2': 440, 'y2': SCREEN_HEIGHT - 110}
-}
-
-def draw_button(frame, region, text, icon=None, active=False):
-    """Draw a button on the frame."""
-    x1, y1 = region['x1'], region['y1']
-    x2, y2 = region['x2'], region['y2']
-
-    # Draw button background
-    color = (0, 120, 255) if active else (0, 70, 150)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 100, 200), 2)
-
-    # Draw text
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 0.8, 2)[0]
-    text_x = x1 + (x2 - x1 - text_size[0]) // 2
-    text_y = y1 + (y2 - y1 + text_size[1]) // 2
-    cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
-
-
-def draw_multiview_selection_prompt(frame):
-    """Draw the multiview selection prompt."""
-    text = "Select two cameras for multiview"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
-    text_x = SCREEN_WIDTH // 2 - text_size[0] // 2
-    text_y = SCREEN_HEIGHT // 2 - 40
-    cv2.putText(frame, text, (text_x, text_y), font, 1.0, (255, 255, 255), 2)
-
-
-def is_point_in_region(x, y, region):
-    """Check if a point is inside a region."""
-    return region['x1'] <= x <= region['x2'] and region['y1'] <= y <= region['y2']
-
-
-def draw_ui(frame):
-    """Draw the UI elements on the frame."""
-    # Draw separator line
-    cv2.line(frame, (0, SCREEN_HEIGHT - 100), (SCREEN_WIDTH, SCREEN_HEIGHT - 100), (80, 80, 80), 2)
-
-    # Draw camera button
-    if not UI_STATE['camera_menu_open']:
-        draw_button(frame, UI_REGIONS['camera_btn'], "Camera", "camera", active=False)
-    else:
-        # Draw expanded camera menu
-        draw_button(frame, UI_REGIONS['cam1_btn'], "Cam1", active=False)
-        draw_button(frame, UI_REGIONS['cam2_btn'], "Cam2", active=False)
-        draw_button(frame, UI_REGIONS['cam3_btn'], "Cam3", active=False)
-        draw_button(frame, UI_REGIONS['multi_btn'], "Multi", active=UI_STATE['multiview_select'])
-
-    # Highlight multiview selection if active
-    if UI_STATE['multiview_select']:
-        draw_multiview_selection_prompt(frame)
-
-
-def simulate_keystroke(key):
-    """Simulate a keystroke."""
-    print(f"Simulating keystroke: {key}")
-    on_press(keyboard.KeyCode.from_char(key))
-
-
-def handle_touch(event, x, y, flags, param):
-    """Handle mouse/touch events."""
-    global UI_STATE, multiview_selection, current_mode
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        print(f"Touch at ({x}, {y})")
-        UI_STATE['last_touch'] = (x, y)
-
-        # Check if touch is in the camera button
-        if is_point_in_region(x, y, UI_REGIONS['camera_btn']):
-            UI_STATE['camera_menu_open'] = not UI_STATE['camera_menu_open']
-            print(f"Camera menu {'opened' if UI_STATE['camera_menu_open'] else 'closed'}")
-            return
-
-        # Handle camera menu selections
-        if UI_STATE['camera_menu_open']:
-            if is_point_in_region(x, y, UI_REGIONS['cam1_btn']):
-                simulate_keystroke('1')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['cam2_btn']):
-                simulate_keystroke('2')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['cam3_btn']):
-                simulate_keystroke('3')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['multi_btn']):
-                print("📺 Select two cameras for multiview")
-                multiview_selection = []
-                UI_STATE['multiview_select'] = True
-                return
-
-        # Handle multiview camera selection
-        if UI_STATE['multiview_select']:
-            for cam, region in [('1', UI_REGIONS['cam1_btn']), ('2', UI_REGIONS['cam2_btn']), ('3', UI_REGIONS['cam3_btn'])]:
-                if is_point_in_region(x, y, region):
-                    if cam not in multiview_selection:
-                        multiview_selection.append(cam)
-                        print(f"✅ Selected Camera {cam}")
-                    if len(multiview_selection) == 2:
-                        simulate_keystroke('0')  # Simulate multiview keystroke
-                        for cam in multiview_selection:
-                            simulate_keystroke(cam)
-                        UI_STATE['multiview_select'] = False
-                    return
