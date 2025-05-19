@@ -7,6 +7,32 @@ from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
 
+
+
+##### CAMERA SECTION #####
+camera_paths = {
+    '1': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.4:1.0-video-index0',
+    '2': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.3:1.0-video-index0',
+    '3': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.2:1.0-video-index0'
+}
+
+current_mode = None
+stop_thread = False
+display_thread = None
+multiview_selection = []
+
+# Hardcode a reasonable default resolution that works on Pi displays
+SCREEN_WIDTH = 1024
+SCREEN_HEIGHT = 600
+
+# Skip the detection logic since it's returning incorrect values
+def get_screen_resolution():
+    print(f"📺 Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    return SCREEN_WIDTH, SCREEN_HEIGHT
+
+# Use a global variable to store screen dimensions
+SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
+
 ##### UI SECTION #####
 UI_STATE = {
     'camera_menu_open': False,
@@ -129,30 +155,6 @@ def handle_touch(event, x, y, flags, param):
                         UI_STATE['multiview_select'] = False
                     return
 
-
-##### CAMERA SECTION #####
-camera_paths = {
-    '1': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.4:1.0-video-index0',
-    '2': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.3:1.0-video-index0',
-    '3': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.2:1.0-video-index0'
-}
-
-current_mode = None
-stop_thread = False
-display_thread = None
-multiview_selection = []
-
-# Hardcode a reasonable default resolution that works on Pi displays
-SCREEN_WIDTH = 1024
-SCREEN_HEIGHT = 600
-
-# Skip the detection logic since it's returning incorrect values
-def get_screen_resolution():
-    print(f"📺 Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-    return SCREEN_WIDTH, SCREEN_HEIGHT
-
-# Use a global variable to store screen dimensions
-SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
 
 def get_single_frame(path):
     cap = cv2.VideoCapture(path)
