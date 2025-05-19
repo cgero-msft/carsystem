@@ -19,16 +19,27 @@ stop_thread = False
 display_thread = None
 multiview_selection = []
 
-# Get system screen resolution
+# Get system screen resolution - Pi-specific approach
 def get_screen_resolution():
-    # Create a temporary window to get screen info
-    temp = np.zeros((1, 1, 3), dtype=np.uint8)
-    cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    screen_width = cv2.getWindowImageRect('temp')[2]
-    screen_height = cv2.getWindowImageRect('temp')[3]
-    cv2.destroyWindow('temp')
-    return screen_width, screen_height
+    try:
+        # Try to use Pi-specific method if available
+        import subprocess
+        output = subprocess.check_output("tvservice -s", shell=True).decode()
+        resolution = output.split(",")[1].split(" ")[2]
+        width, height = map(int, resolution.split("x"))
+        print(f"📺 Detected screen resolution: {width}x{height}")
+        return width, height
+    except:
+        # Fallback method
+        print("📺 Using fallback resolution detection")
+        temp = np.zeros((1, 1, 3), dtype=np.uint8)
+        cv2.namedWindow('temp', cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty('temp', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        screen_width = cv2.getWindowImageRect('temp')[2]
+        screen_height = cv2.getWindowImageRect('temp')[3]
+        cv2.destroyWindow('temp')
+        print(f"📺 Detected screen resolution: {screen_width}x{screen_height}")
+        return screen_width, screen_height
 
 # Use a global variable to store screen dimensions
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
@@ -54,13 +65,17 @@ def show_multiview(cam_keys):
         for k in cam_keys:
             cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-            # Keep original resolution, we'll resize frames later
             cap.set(cv2.CAP_PROP_FPS, 30)
             caps.append(cap)
 
-        # Create a full screen window
-        cv2.namedWindow('MultiView (press q to exit)', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('MultiView (press q to exit)', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        # Create window with Raspberry Pi optimized settings
+        window_name = 'MultiView (press q to exit)'
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        # Force window to be positioned at 0,0 and set size explicitly
+        cv2.moveWindow(window_name, 0, 0)
+        cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
+        # Set fullscreen after positioning
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         while not stop_thread:
             frames = []
@@ -106,9 +121,13 @@ def show_single(cam_key):
         print(f"❌ Failed to open {path}")
         return None
 
-    # Create a full screen window
+    # Create window with Raspberry Pi optimized settings
     window_name = f'Camera {cam_key} (press q to exit)'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    # Force window to be positioned at 0,0 and set size explicitly
+    cv2.moveWindow(window_name, 0, 0)
+    cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
+    # Set fullscreen after positioning
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     def display():
