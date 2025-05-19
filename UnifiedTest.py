@@ -319,6 +319,39 @@ UI_REGIONS = {
     'multi_btn': {'x1': 340, 'y1': SCREEN_HEIGHT - 190, 'x2': 440, 'y2': SCREEN_HEIGHT - 110}
 }
 
+def draw_button(frame, region, text, icon=None, active=False):
+    """Draw a button on the frame."""
+    x1, y1 = region['x1'], region['y1']
+    x2, y2 = region['x2'], region['y2']
+
+    # Draw button background
+    color = (0, 120, 255) if active else (0, 70, 150)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 100, 200), 2)
+
+    # Draw text
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 0.8, 2)[0]
+    text_x = x1 + (x2 - x1 - text_size[0]) // 2
+    text_y = y1 + (y2 - y1 + text_size[1]) // 2
+    cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
+
+
+def draw_multiview_selection_prompt(frame):
+    """Draw the multiview selection prompt."""
+    text = "Select two cameras for multiview"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
+    text_x = SCREEN_WIDTH // 2 - text_size[0] // 2
+    text_y = SCREEN_HEIGHT // 2 - 40
+    cv2.putText(frame, text, (text_x, text_y), font, 1.0, (255, 255, 255), 2)
+
+
+def is_point_in_region(x, y, region):
+    """Check if a point is inside a region."""
+    return region['x1'] <= x <= region['x2'] and region['y1'] <= y <= region['y2']
+
+
 def draw_ui(frame):
     """Draw the UI elements on the frame."""
     # Draw separator line
@@ -337,6 +370,13 @@ def draw_ui(frame):
     # Highlight multiview selection if active
     if UI_STATE['multiview_select']:
         draw_multiview_selection_prompt(frame)
+
+
+def simulate_keystroke(key):
+    """Simulate a keystroke."""
+    print(f"Simulating keystroke: {key}")
+    on_press(keyboard.KeyCode.from_char(key))
+
 
 def handle_touch(event, x, y, flags, param):
     """Handle mouse/touch events."""
@@ -385,42 +425,3 @@ def handle_touch(event, x, y, flags, param):
                             simulate_keystroke(cam)
                         UI_STATE['multiview_select'] = False
                     return
-
-
-def simulate_keystroke(key):
-    """Simulate a keystroke."""
-    print(f"Simulating keystroke: {key}")
-    on_press(keyboard.KeyCode.from_char(key))
-
-
-def is_point_in_region(x, y, region):
-    """Check if a point is inside a region."""
-    return region['x1'] <= x <= region['x2'] and region['y1'] <= y <= region['y2']
-
-
-def draw_button(frame, region, text, icon=None, active=False):
-    """Draw a button on the frame."""
-    x1, y1 = region['x1'], region['y1']
-    x2, y2 = region['x2'], region['y2']
-
-    # Draw button background
-    color = (0, 120, 255) if active else (0, 70, 150)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 100, 200), 2)
-
-    # Draw text
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 0.8, 2)[0]
-    text_x = x1 + (x2 - x1 - text_size[0]) // 2
-    text_y = y1 + (y2 - y1 + text_size[1]) // 2
-    cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
-
-
-def draw_multiview_selection_prompt(frame):
-    """Draw the multiview selection prompt."""
-    text = "Select two cameras for multiview"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
-    text_x = SCREEN_WIDTH // 2 - text_size[0] // 2
-    text_y = SCREEN_HEIGHT // 2 - 40
-    cv2.putText(frame, text, (text_x, text_y), font, 1.0, (255, 255, 255), 2)
