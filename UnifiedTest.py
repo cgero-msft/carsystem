@@ -102,7 +102,7 @@ def draw_button(frame, region, text, icon=None, active=False):
         
         # Simple camera icon
         cv2.rectangle(frame, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size), (255, 255, 255), 1)
-        cv2.circle(frame, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//4, (255, 255, 255), 1))
+        cv2.circle(frame, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//4, (255, 255, 255), 1)
 
 
 def draw_multiview_selection_prompt(frame):
