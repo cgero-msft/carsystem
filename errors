@@ -1,3 +1,16 @@
+cgero88@raspberrypi:~ $ python3 UnifiedTest.py
+tvservice is not supported when using the vc4-kms-v3d driver.
+Similar features are available with standard linux tools
+such as kmsprint from kms++-utils
+📺 Using OpenCV fallback resolution detection
+📺 Detected screen resolution: 1x1
+🎥 Webcam viewer ready
+🕹️  Hotkeys:
+  - 1/2/3 = Fullscreen view
+  - 0 + two cameras = Multiview
+  - A/S/D/F/G/H = Fan speed
+  - ESC = Quit
+📷 Showing multiview: Camera 1 and Camera 2
 🔎 Fullscreen view: Camera 2
 Exception in thread Thread-3:
 Traceback (most recent call last):
@@ -8,3 +21,5 @@ Traceback (most recent call last):
   File "/home/cgero88/UnifiedTest.py", line 203, in display
     frame = cv2.resize(frame, (new_w, new_h))
 cv2.error: OpenCV(4.11.0) /tmp/pip-wheel-4bfp8dfj/opencv-python_9948b8f0fe2c41ffa83bf965d58de99a/opencv/modules/imgproc/src/resize.cpp:4211: error: (-215:Assertion failed) inv_scale_x > 0 in function 'resize'
+
+^[👋 Exiting...
