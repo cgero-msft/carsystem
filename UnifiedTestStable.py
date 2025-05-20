@@ -95,24 +95,60 @@ def show_multiview(cam_keys):
                 # Get original frame dimensions
                 h, w = frame.shape[:2]
                 
-                # Calculate scaling factors to fit exactly half screen width and full height
+                # Calculate scaling factors to FILL exactly half screen width and full height
                 scale_w = half_width / w
                 scale_h = SCREEN_HEIGHT / h
-                scale = min(scale_w, scale_h)  # Maintain aspect ratio
+                scale = max(scale_w, scale_h)  # Use max to fill entire area (will crop)
                 
-                # Resize frame
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-                frame = cv2.resize(frame, (new_w, new_h))
+                # Calculate the dimensions after scaling
+                scaled_w = int(w * scale)
+                scaled_h = int(h * scale)
                 
-                # Calculate position to center within its half
+                # Resize frame to the larger size
+                frame_resized = cv2.resize(frame, (scaled_w, scaled_h))
+                
+                # Calculate center crop to get exact dimensions
+                # Find the center point
+                center_x = scaled_w // 2
+                center_y = scaled_h // 2
+                
+                # Calculate the crop boundaries for exact half width and full height
+                crop_x_start = center_x - (half_width // 2)
+                crop_y_start = center_y - (SCREEN_HEIGHT // 2)
+                
+                # Ensure crop boundaries are within the image
+                crop_x_start = max(0, min(crop_x_start, scaled_w - half_width))
+                crop_y_start = max(0, min(crop_y_start, scaled_h - SCREEN_HEIGHT))
+                
+                # Extract the correctly sized center portion
+                crop_x_end = crop_x_start + half_width
+                crop_y_end = crop_y_start + SCREEN_HEIGHT
+                
+                # Handle case where scaled image isn't big enough
+                if crop_x_end > scaled_w:
+                    crop_x_end = scaled_w
+                if crop_y_end > scaled_h:
+                    crop_y_end = scaled_h
+                
+                # Crop the frame to focus on center while filling view
+                frame_cropped = frame_resized[crop_y_start:crop_y_end, crop_x_start:crop_x_end]
+                
+                # Handle case where cropped frame doesn't match required dimensions
+                final_h, final_w = frame_cropped.shape[:2]
+                if final_w != half_width or final_h != SCREEN_HEIGHT:
+                    # Create a black canvas of exactly the right size
+                    exact_size = np.zeros((SCREEN_HEIGHT, half_width, 3), dtype=np.uint8)
+                    # Place the cropped frame centered in the canvas
+                    y_offset = (SCREEN_HEIGHT - final_h) // 2
+                    x_offset = (half_width - final_w) // 2
+                    exact_size[y_offset:y_offset+final_h, x_offset:x_offset+final_w] = frame_cropped
+                    frame_cropped = exact_size
+                
+                # Place in the correct half of the screen
                 x_start = i * half_width
-                x_offset = x_start + ((half_width - new_w) // 2)
-                y_offset = (SCREEN_HEIGHT - new_h) // 2
-                
-                # Place frame on background
-                background[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame
+                background[:, x_start:x_start+half_width] = frame_cropped
 
+            # Display the composite image with both camera feeds
             cv2.imshow(window_name, background)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
