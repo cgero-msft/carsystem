@@ -12,11 +12,11 @@ from adafruit_pca9685 import PCA9685
 # Constants
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 600
-FADE_DURATION = 200
+FADE_DURATION = 200  # ms
 FADE_STEPS = 10
 STEP_DELAY = FADE_DURATION // FADE_STEPS
 TARGET_ALPHA = 0.7
-HIDE_TIMEOUT = 5000
+HIDE_TIMEOUT = 5000  # ms
 
 # Camera paths
 camera_paths = {
@@ -25,17 +25,13 @@ camera_paths = {
     '3': '/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1.2:1.0-video-index0'
 }
 
-def get_frame(path):
-    cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    return cv2.resize(frame, (SCREEN_WIDTH, SCREEN_HEIGHT))
+# Initialize VideoCapture objects once
+caps = {k: cv2.VideoCapture(p) for k, p in camera_paths.items()}
+for cap in caps.values():
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    cap.set(cv2.CAP_PROP_FPS, 30)
 
-# PDA9685 setup for fan control
+# PCA9685 setup for fan control
 i2c = busio.I2C(SCL, SDA)
 pca = PCA9685(i2c)
 pca.frequency = 250
@@ -66,8 +62,8 @@ class OverlayMenu:
                 self.overlay,
                 text=text,
                 command=lambda c=cmd: self._on_select(c),
-                width=10,
-                height=2,
+                width=12,
+                height=3,
                 relief='flat',
                 activebackground='lightgrey'
             )
@@ -83,12 +79,14 @@ class OverlayMenu:
             btn.place(relx=relx, rely=0.5, anchor='center')
 
     def _fade_in(self, step=0):
+        if not self.overlay.winfo_exists(): return
         alpha = (TARGET_ALPHA / FADE_STEPS) * step
         self.overlay.attributes('-alpha', alpha)
         if step < FADE_STEPS:
             self.overlay.after(STEP_DELAY, lambda: self._fade_in(step+1))
 
     def _fade_out(self, step=FADE_STEPS):
+        if not self.overlay.winfo_exists(): return
         alpha = (TARGET_ALPHA / FADE_STEPS) * step
         self.overlay.attributes('-alpha', alpha)
         if step > 0:
@@ -97,7 +95,8 @@ class OverlayMenu:
             self.destroy()
 
     def _on_select(self, cmd):
-        self.overlay.after_cancel(self.hide_id)
+        if hasattr(self, 'hide_id'):
+            self.overlay.after_cancel(self.hide_id)
         cmd()
         self._fade_out()
 
@@ -113,33 +112,43 @@ class UIApp:
         self.current_menu = None
         self.current_mode = None
         self.multiview_selection = []
+
         # Video display label
-        self.video_label = tk.Label(self.root)
+        self.video_label = tk.Label(self.root, bg='black')
         self.video_label.place(relx=0.5, rely=0.5, anchor='center')
+
         # Bind screen tap
         self.root.bind('<Button-1>', self.show_main_menu)
+
         # Start camera update loop
         self.root.after(0, self.update_frame)
+
         # Start hotkey listener
         self.listener = Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
 
     def update_frame(self):
-        # Choose mode
-        if self.current_mode in ['1','2','3']:
-            frame = get_frame(camera_paths[self.current_mode])
-        elif len(self.multiview_selection) == 0 and self.current_mode == 'multi':
-            # do nothing until two selected
-            frame = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        elif self.current_mode == 'multi' and self.multiview_selection:
-            # show first selected only until second arrives
-            frame = get_frame(camera_paths[self.multiview_selection[0]])
+        # Read frame(s) depending on mode
+        if self.current_mode in ['1', '2', '3']:
+            cap = caps[self.current_mode]
+            ret, frame = cap.read()
+            if not ret: frame = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+        elif self.current_mode == 'multi' and len(self.multiview_selection) == 2:
+            # simple side by side
+            key1, key2 = self.multiview_selection
+            ret1, f1 = caps[key1].read()
+            ret2, f2 = caps[key2].read()
+            f1 = f1 if ret1 else np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH//2, 3), dtype=np.uint8)
+            f2 = f2 if ret2 else np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH//2, 3), dtype=np.uint8)
+            f1 = cv2.resize(f1, (SCREEN_WIDTH//2, SCREEN_HEIGHT))
+            f2 = cv2.resize(f2, (SCREEN_WIDTH//2, SCREEN_HEIGHT))
+            frame = np.hstack((f1, f2))
         else:
             frame = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+
         # Convert to PhotoImage
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(img)
-        img = img.resize((SCREEN_WIDTH, SCREEN_HEIGHT))
+        img = Image.fromarray(img).resize((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.photo = ImageTk.PhotoImage(img)
         self.video_label.configure(image=self.photo)
         self.root.after(30, self.update_frame)
@@ -155,10 +164,10 @@ class UIApp:
     def show_camera_menu(self):
         self._destroy_menu()
         buttons = [
-            ('Camera 1', lambda: self.send_key('1')),
-            ('Camera 2', lambda: self.send_key('2')),
-            ('Camera 3', lambda: self.send_key('3')),
-            ('Multi',    lambda: self.send_key('0'))
+            ('1', lambda: self.send_key('1')),
+            ('2', lambda: self.send_key('2')),
+            ('3', lambda: self.send_key('3')),
+            ('Multi', lambda: self.send_key('0'))
         ]
         self.current_menu = OverlayMenu(self.root, buttons)
 
@@ -170,30 +179,22 @@ class UIApp:
         self.current_menu = OverlayMenu(self.root, buttons)
 
     def send_key(self, key_char):
-        # emit
         keyboard_ctrl.press(key_char)
         keyboard_ctrl.release(key_char)
-        # handle
         self.on_key(key_char)
 
     def on_key(self, c):
-        # fan control
         if c in duty_lookup:
             fan.duty_cycle = duty_lookup[c]
-        # camera modes
-        elif c in ['1','2','3']:
-            if self.current_mode != 'multi':
-                self.current_mode = c
-                self.multiview_selection = []
+        elif c in ['1', '2', '3']:
+            self.current_mode = c
+            self.multiview_selection = []
         elif c == '0':
             self.current_mode = 'multi'
             self.multiview_selection = []
-        elif self.current_mode == 'multi' and c in ['1','2','3']:
-            if c not in self.multiview_selection:
+        elif self.current_mode == 'multi' and c in ['1', '2', '3']:
+            if len(self.multiview_selection) < 2 and c not in self.multiview_selection:
                 self.multiview_selection.append(c)
-            if len(self.multiview_selection)==2:
-                # switch to multiview: not fully implemented; UI just shows single first
-                pass
 
     def on_press(self, key):
         try:
@@ -219,9 +220,8 @@ class UIApp:
         self.root.destroy()
 
     def run(self):
-        # start default view
         self.current_mode = 'multi'
-        self.multiview_selection = ['1','2']
+        self.multiview_selection = ['1', '2']
         self.root.mainloop()
 
 if __name__ == '__main__':
