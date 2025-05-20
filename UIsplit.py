@@ -10,9 +10,9 @@ class OverlayMenu:
         self.overlay.attributes('-fullscreen', True, '-alpha', 0.7, '-topmost', True)
         self.overlay.configure(bg='white')
         for idx, (text, cmd) in enumerate(buttons):
-            btn = tk.Button(self.overlay, text=text, command=lambda c=cmd: self._select(c), width=12, height=3)
+            btn = tk.Button(self.overlay, text=text,
+                            command=lambda c=cmd: self._select(c), width=12, height=3)
             btn.place(relx=(idx+1)/(len(buttons)+1), rely=0.5, anchor='center')
-        # Auto-destroy after timeout
         self.overlay.after(5000, self.destroy)
 
     def _select(self, cmd):
@@ -31,13 +31,11 @@ class UIOverlay(threading.Thread):
 
     def run(self):
         root = tk.Tk()
-        # Make root window fullscreen and transparent
+        # Create an invisible fullscreen window that still captures clicks
         root.overrideredirect(True)
         root.attributes('-fullscreen', True, '-topmost', True)
-        # Use a transparent color key to make root window invisible
-        TRANSPARENT_COLOR = 'magenta'
-        root.config(bg=TRANSPARENT_COLOR)
-        root.attributes('-transparentcolor', TRANSPARENT_COLOR)
+        # Fully transparent window
+        root.attributes('-alpha', 0.0)
         # Ensure it covers the entire screen
         root.geometry(f"{root.winfo_screenwidth()}x{root.winfo_screenheight()}+0+0")
 
@@ -60,16 +58,15 @@ class UIOverlay(threading.Thread):
             labels = ['0%','20%','40%','60%','80%','100%']
             OverlayMenu(root, [(lbl, lambda k=k: self.send_fan(k)) for lbl,k in zip(labels,keys)])
 
-        # Bind click anywhere to bring up menu
         root.bind('<Button-1>', show_main)
         root.mainloop()
 
 if __name__ == '__main__':
-    # Start your background camera/fan process
+    # Start background camera/fan process
     cam_thread = threading.Thread(target=main, daemon=True)
     cam_thread.start()
 
-    # Start the overlay UI thread
+    # Start overlay
     ui = UIOverlay(
         send_camera=lambda c: Controller().press(c) or Controller().release(c),
         send_fan=lambda k: Controller().press(k) or Controller().release(k)
