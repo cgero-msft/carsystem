@@ -1,4 +1,4 @@
-cgero88@raspberrypi:~ $ python3 UIsplit.py 
+cgero88@raspberrypi:~ $ python3 UnifiedTestStableFullscreen.py 
 📺 Using fixed resolution: 1024x600
 🎥 Webcam viewer ready
 🕹️  Hotkeys:
@@ -11,9 +11,8 @@ Exception in thread Thread-2:
 Traceback (most recent call last):
   File "/usr/lib/python3.9/threading.py", line 954, in _bootstrap_inner
     self.run()
-  File "/home/cgero88/UIsplit.py", line 40, in run
-    root.attributes('-transparentcolor', TRANSPARENT_COLOR)
+  File "/home/cgero88/UI.py", line 48, in run
+    root.attributes('-transparentcolor', 'black')  # make background click-through if supported
   File "/usr/lib/python3.9/tkinter/__init__.py", line 1976, in wm_attributes
     return self.tk.call(args)
-_tkinter.TclError: bad attribute "-transparentcolor": must be -alpha, -topmost, -zoomed, -fullscreen, or -type
-👋 Exiting...
+_tkinter.TclError: bad attribute "-transparentcolor": must be -alpha, -topmost, -zoomed, -fullscreen, or -typ
