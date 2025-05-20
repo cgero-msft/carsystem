@@ -6,6 +6,8 @@ import time
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
+import tkinter as tk
+from UI import OverlayMenu, install_opencv_callback
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -317,6 +319,20 @@ def main():
 
     # Auto-start in multiview mode with Cameras 1 and 2
     switch_mode('multi', ['1', '2'])
+    cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+# Create (but hide) a Tk root to parent the overlays
+    root = tk.Tk()
+    root.withdraw()
+
+# Bind clicks in the OpenCV window to pop up the menu
+    install_opencv_callback('Camera View',
+        lambda: OverlayMenu(root, [
+            ('Cameras', show_camera),    # your existing camera submenu functions
+            ('Fans',    show_fans)       # your existing fan submenu functions
+        ])
+        )   
+
 
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
