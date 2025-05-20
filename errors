@@ -1,5 +1,27 @@
-cgero88@raspberrypi:~ $ python3 UnifiedTest.py
-  File "/home/cgero88/UnifiedTest.py", line 105
-    cv2.circle(frame, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//4, (255, 255, 255), 1))
-                                                                                                       ^
-SyntaxError: unmatched ')'
+cgero88@raspberrypi:~ $ python3 UI.py 
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1892, in __call__
+    return self.func(*args)
+  File "/home/cgero88/UI.py", line 68, in <lambda>
+    command=lambda c=cmd: self._on_select(c),
+  File "/home/cgero88/UI.py", line 102, in _on_select
+    self._fade_out()
+  File "/home/cgero88/UI.py", line 93, in _fade_out
+    self.overlay.attributes('-alpha', alpha)
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1976, in wm_attributes
+    return self.tk.call(args)
+_tkinter.TclError: bad window path name ".!toplevel"
+Exception in Tkinter callback
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1892, in __call__
+    return self.func(*args)
+  File "/home/cgero88/UI.py", line 68, in <lambda>
+    command=lambda c=cmd: self._on_select(c),
+  File "/home/cgero88/UI.py", line 102, in _on_select
+    self._fade_out()
+  File "/home/cgero88/UI.py", line 93, in _fade_out
+    self.overlay.attributes('-alpha', alpha)
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1976, in wm_attributes
+    return self.tk.call(args)
+_tkinter.TclError: bad window path name ".!toplevel3"
