@@ -7,12 +7,15 @@ cgero88@raspberrypi:~ $ python3 UnifiedTestStableFullscreen.py
   - A/S/D/F/G/H = Fan speed
   - ESC = Quit
 📷 Showing multiview: Camera 1 and Camera 2
-Exception in thread Thread-2:
+Camera button clicked
+📺 Entering multi-select mode: Press 2 camera numbers (1-3)
+Exception in Tkinter callback
 Traceback (most recent call last):
-  File "/usr/lib/python3.9/threading.py", line 954, in _bootstrap_inner
-    self.run()
-  File "/home/cgero88/UI.py", line 48, in run
-    root.attributes('-transparentcolor', 'black')  # make background click-through if supported
-  File "/usr/lib/python3.9/tkinter/__init__.py", line 1976, in wm_attributes
-    return self.tk.call(args)
-_tkinter.TclError: bad attribute "-transparentcolor": must be -alpha, -topmost, -zoomed, -fullscreen, or -typ
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1892, in __call__
+    return self.func(*args)
+  File "/home/cgero88/UI.py", line 58, in <lambda>
+    command=lambda c=cmd, t=text: self._handle_selection(c, t)
+  File "/home/cgero88/UI.py", line 115, in _handle_selection
+    self.buttons[f'Cam {cam_num}'].cget('command')()
+TypeError: '_tkinter.Tcl_Obj' object is not callable
+👋 Exiting...
