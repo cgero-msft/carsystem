@@ -45,7 +45,7 @@ class UIOverlay(threading.Thread):
     def run(self):
         root = tk.Tk()
         root.attributes('-fullscreen', True)
-        root.attributes('-transparentcolor', 'black')  # make background click-through if supported
+        root.attributes('-alpha', 0.3)  # semi-transparent 30% opacity
         root.configure(bg='black')
         root.overrideredirect(True)
 
