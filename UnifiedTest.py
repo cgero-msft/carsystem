@@ -6,8 +6,10 @@ import time
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
-
-
+import tkinter as tk
+from tkinter import ttk
+from PIL import Image, ImageTk
+import os
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -25,7 +27,6 @@ multiview_selection = []
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 600
 
-# Skip the detection logic since it's returning incorrect values
 def get_screen_resolution():
     print(f"📺 Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
     return SCREEN_WIDTH, SCREEN_HEIGHT
@@ -34,368 +35,313 @@ def get_screen_resolution():
 SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
 
 ##### UI SECTION #####
-UI_STATE = {
-    'camera_menu_open': False,
-    'multiview_select': False,
-    'last_touch': None
-}
-
-# Update UI_REGIONS to position the camera button correctly
-def define_ui_regions():
-    # Calculate the black bar area
-    bottom_bar_height = SCREEN_HEIGHT - (SCREEN_HEIGHT // 3 * 2)  # 1/3 of screen height
-    bottom_bar_y_start = SCREEN_HEIGHT // 3 * 2  # Start at 2/3 down the screen
-    
-    # Position camera button at left third horizontally and centered vertically in black bar
-    btn_width = 100
-    btn_height = 60
-    left_third_x = SCREEN_WIDTH // 3 - btn_width // 2  # Center of left third
-    vertical_center_y = bottom_bar_y_start + (bottom_bar_height // 2) - (btn_height // 2)
-    
-    camera_btn = {
-        'x1': left_third_x, 
-        'y1': vertical_center_y, 
-        'x2': left_third_x + btn_width, 
-        'y2': vertical_center_y + btn_height
-    }
-    
-    # Camera selection menu (position below the main camera button)
-    menu_y = vertical_center_y - 100  # Position above the main button
-    cam1_btn = {'x1': left_third_x - 180, 'y1': menu_y, 'x2': left_third_x - 100, 'y2': menu_y + btn_height}
-    cam2_btn = {'x1': left_third_x - 90, 'y1': menu_y, 'x2': left_third_x - 10, 'y2': menu_y + btn_height}
-    cam3_btn = {'x1': left_third_x, 'y1': menu_y, 'x2': left_third_x + 80, 'y2': menu_y + btn_height}
-    multi_btn = {'x1': left_third_x + 90, 'y1': menu_y, 'x2': left_third_x + 170, 'y2': menu_y + btn_height}
-    
-    return {
-        'camera_btn': camera_btn,
-        'cam1_btn': cam1_btn,
-        'cam2_btn': cam2_btn,
-        'cam3_btn': cam3_btn,
-        'multi_btn': multi_btn
-}
-
-# Replace the current UI_REGIONS with calculated regions
-UI_REGIONS = define_ui_regions()
-
-def draw_button(frame, region, text, icon=None, active=False):
-    """Draw a button on the frame."""
-    x1, y1 = region['x1'], region['y1']
-    x2, y2 = region['x2'], region['y2']
-
-    # Draw button background with brighter colors
-    color = (0, 150, 255) if active else (0, 100, 200)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
-
-    # Draw text
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 0.8, 2)[0]
-    text_x = x1 + (x2 - x1 - text_size[0]) // 2
-    text_y = y1 + (y2 - y1 + text_size[1]) // 2
-    cv2.putText(frame, text, (text_x, text_y), font, 0.8, (255, 255, 255), 2)
-    
-    # Draw camera icon if specified
-    if icon == "camera":
-        icon_size = 20
-        icon_x = x1 + 10
-        icon_y = text_y - 15
+class CameraUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Car Camera System")
+        self.attributes("-fullscreen", True)
         
-        # Simple camera icon
-        cv2.rectangle(frame, (icon_x, icon_y), (icon_x + icon_size, icon_y + icon_size), (255, 255, 255), 1)
-        cv2.circle(frame, (icon_x + icon_size//2, icon_y + icon_size//2), icon_size//4, (255, 255, 255), 1)
-
-
-def draw_multiview_selection_prompt(frame):
-    """Draw the multiview selection prompt."""
-    text = "Select two cameras for multiview"
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(text, font, 1.0, 2)[0]
-    text_x = SCREEN_WIDTH // 2 - text_size[0] // 2
-    text_y = SCREEN_HEIGHT // 2 - 40
-    cv2.putText(frame, text, (text_x, text_y), font, 1.0, (255, 255, 255), 2)
-
-
-def is_point_in_region(x, y, region):
-    """Check if a point is inside a region."""
-    return region['x1'] <= x <= region['x2'] and region['y1'] <= y <= region['y2']
-
-
-def draw_ui(frame):
-    """Draw the UI elements on the frame."""
-    # Draw separator line
-    cv2.line(frame, (0, SCREEN_HEIGHT - 100), (SCREEN_WIDTH, SCREEN_HEIGHT - 100), (80, 80, 80), 2)
-
-    # Draw camera button
-    if not UI_STATE['camera_menu_open']:
-        draw_button(frame, UI_REGIONS['camera_btn'], "Camera", "camera", active=False)
-    else:
-        # Draw expanded camera menu
-        draw_button(frame, UI_REGIONS['cam1_btn'], "Cam1", active=False)
-        draw_button(frame, UI_REGIONS['cam2_btn'], "Cam2", active=False)
-        draw_button(frame, UI_REGIONS['cam3_btn'], "Cam3", active=False)
-        draw_button(frame, UI_REGIONS['multi_btn'], "Multi", active=UI_STATE['multiview_select'])
-
-    # Highlight multiview selection if active
-    if UI_STATE['multiview_select']:
-        draw_multiview_selection_prompt(frame)
-
-
-def simulate_keystroke(key):
-    """Simulate a keystroke."""
-    print(f"Simulating keystroke: {key}")
-    on_press(keyboard.KeyCode.from_char(key))
-
-
-def handle_touch(event, x, y, flags, param):
-    """Handle mouse/touch events."""
-    global UI_STATE, multiview_selection, current_mode
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        print(f"Touch at ({x}, {y})")
-        UI_STATE['last_touch'] = (x, y)
-
-        # Check if touch is in the camera button
-        if is_point_in_region(x, y, UI_REGIONS['camera_btn']):
-            UI_STATE['camera_menu_open'] = not UI_STATE['camera_menu_open']
-            print(f"Camera menu {'opened' if UI_STATE['camera_menu_open'] else 'closed'}")
-            return
-
-        # Handle camera menu selections
-        if UI_STATE['camera_menu_open']:
-            if is_point_in_region(x, y, UI_REGIONS['cam1_btn']):
-                simulate_keystroke('1')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['cam2_btn']):
-                simulate_keystroke('2')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['cam3_btn']):
-                simulate_keystroke('3')
-                UI_STATE['camera_menu_open'] = False
-                return
-            elif is_point_in_region(x, y, UI_REGIONS['multi_btn']):
-                print("📺 Select two cameras for multiview")
-                multiview_selection = []
-                UI_STATE['multiview_select'] = True
-                return
-
-        # Handle multiview camera selection
-        if UI_STATE['multiview_select']:
-            for cam, region in [('1', UI_REGIONS['cam1_btn']), ('2', UI_REGIONS['cam2_btn']), ('3', UI_REGIONS['cam3_btn'])]:
-                if is_point_in_region(x, y, region):
-                    if cam not in multiview_selection:
-                        multiview_selection.append(cam)
-                        print(f"✅ Selected Camera {cam}")
-                    if len(multiview_selection) == 2:
-                        simulate_keystroke('0')  # Simulate multiview keystroke
-                        for cam in multiview_selection:
-                            simulate_keystroke(cam)
-                        UI_STATE['multiview_select'] = False
-                    return
-
-
-def get_single_frame(path):
-    cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        print(f"❌ Could not open {path}")
-        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    ret, frame = cap.read()
-    cap.release()
-    if not ret:
-        return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    return cv2.resize(frame, (SCREEN_WIDTH, SCREEN_HEIGHT))
-
-def show_multiview(cam_keys):
-    global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
-    stop_thread = False
-    print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
-
-    # Ensure we have valid screen dimensions
-    if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
-        print("⚠️ Invalid screen dimensions, resetting to defaults")
-        SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
-
-    def display():
-        caps = []
-        for k in cam_keys:
-            cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            caps.append(cap)
-
-        # Create window with Raspberry Pi optimized settings
-        window_name = 'Camera View'
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        # Configure grid
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=3)  # Camera view takes 2/3 of height
+        self.grid_rowconfigure(1, weight=1)  # Controls take 1/3 of height
         
-        # Important! Set mouse callback for touch events
-        cv2.setMouseCallback(window_name, handle_touch)
+        # Variables
+        self.current_mode = None
+        self.multiview_selection = []
+        self.is_multiview_select_mode = False
+        self.camera_caps = {}
+        self.photo_images = {}  # Keep references to avoid garbage collection
         
-        # Allow window system to initialize
-        time.sleep(0.5)
+        # Create UI elements
+        self.create_widgets()
         
-        # Force window to be positioned at 0,0 and set size explicitly
-        cv2.moveWindow(window_name, 0, 0)
-        cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
+        # Setup keyboard shortcuts
+        self.bind("<Key>", self.handle_key)
+        self.bind("<Escape>", self.quit_app)
         
-        # Set fullscreen 
-        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    def create_widgets(self):
+        # Camera display area (top 2/3)
+        self.camera_frame = tk.Frame(self, bg="black", height=SCREEN_HEIGHT*2//3)
+        self.camera_frame.grid(row=0, column=0, sticky="nsew")
         
-        # Show initial black background while loading
-        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        cv2.imshow(window_name, black_bg)
-        cv2.waitKey(1)
-
-        while not stop_thread:
-            # Create a fresh black background for each frame
-            background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+        # Create camera views (initially hidden)
+        self.single_view = tk.Label(self.camera_frame, bg="black")
+        self.single_view.pack(expand=True, fill="both")
+        self.single_view.pack_forget()
+        
+        # Multi-view setup (two side by side labels)
+        self.multi_view_frame = tk.Frame(self.camera_frame, bg="black")
+        self.left_view = tk.Label(self.multi_view_frame, bg="black")
+        self.right_view = tk.Label(self.multi_view_frame, bg="black")
+        self.left_view.pack(side="left", expand=True, fill="both")
+        self.right_view.pack(side="left", expand=True, fill="both")
+        self.multi_view_frame.pack(expand=True, fill="both")
+        self.multi_view_frame.pack_forget()
+        
+        # Control panel (bottom 1/3)
+        self.control_frame = tk.Frame(self, bg="#333333", height=SCREEN_HEIGHT//3)
+        self.control_frame.grid(row=1, column=0, sticky="nsew")
+        
+        # Common button style parameters
+        button_font = ("Arial", 16, "bold")
+        button_width = 6
+        button_height = 2
+        
+        # Create camera controls (left side)
+        self.camera_controls_frame = tk.Frame(self.control_frame, bg="#333333")
+        self.camera_controls_frame.place(relx=0.2, rely=0.5, anchor="center")
+        
+        # Camera control label
+        camera_label = tk.Label(self.camera_controls_frame, text="CAMERA", font=button_font, bg="#333333", fg="white")
+        camera_label.pack(pady=(0, 10))
+        
+        # Camera control buttons
+        camera_buttons = [
+            ("1", "1", lambda: self.select_camera("1")),
+            ("2", "2", lambda: self.select_camera("2")),
+            ("3", "3", lambda: self.select_camera("3")),
+            ("Multi", "0", self.start_multiview_select)
+        ]
+        
+        for text, key, command in camera_buttons:
+            btn = tk.Button(
+                self.camera_controls_frame,
+                text=text,
+                bg="#0064C8",
+                fg="white",
+                activebackground="#0078F0",
+                activeforeground="white",
+                font=button_font,
+                width=button_width,
+                height=1,
+                command=command
+            )
+            btn.pack(pady=5)
             
-            frames = []
-            for cap, k in zip(caps, cam_keys):
-                ret, frame = cap.read()
-                if not ret:
-                    print(f"⚠️ Camera {k} failed to read")
-                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                
-                # Calculate target height - use the same calculation method for all modes
-                target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
-                
-                # Resize to half screen width and target height maintaining aspect ratio
-                h, w = frame.shape[:2]
-                half_width = SCREEN_WIDTH // 2
-                
-                # Calculate scaling factors
-                scale_w = half_width / w
-                scale_h = target_height / h
-                scale = min(scale_w, scale_h)  # Maintain aspect ratio
-                
-                # Calculate new dimensions
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-                
-                # Resize the frame
-                frame = cv2.resize(frame, (new_w, new_h))
-                
-                frames.append(frame)
+        # Create fan controls (right side)
+        self.fan_controls_frame = tk.Frame(self.control_frame, bg="#333333")
+        self.fan_controls_frame.place(relx=0.8, rely=0.5, anchor="center")
+        
+        # Fan control label
+        fan_label = tk.Label(self.fan_controls_frame, text="FAN", font=button_font, bg="#333333", fg="white")
+        fan_label.pack(pady=(0, 10))
+        
+        # Fan control buttons
+        fan_buttons = [
+            ("0%", "a", 0x0000),
+            ("20%", "s", 0x3333),
+            ("40%", "d", 0x6666),
+            ("60%", "f", 0x9999),
+            ("80%", "g", 0xCCCC),
+            ("100%", "h", 0xFFFF)
+        ]
+        
+        for text, key, duty in fan_buttons:
+            btn = tk.Button(
+                self.fan_controls_frame,
+                text=text,
+                bg="#555555",
+                fg="white",
+                activebackground="#777777",
+                activeforeground="white",
+                font=button_font,
+                width=button_width,
+                height=1,
+                command=lambda d=duty, k=key, t=text: self.set_fan_speed(d, k, t)
+            )
+            btn.pack(pady=2)
+        
+        # Current fan speed display
+        self.fan_speed_label = tk.Label(
+            self.control_frame,
+            text="Current Fan: 0%",
+            font=("Arial", 14, "bold"),
+            bg="#333333",
+            fg="white"
+        )
+        self.fan_speed_label.place(relx=0.5, rely=0.9, anchor="center")
+        
+        # Multiview selection prompt (initially hidden)
+        self.multiview_prompt = tk.Label(
+            self,
+            text="Select two cameras for multiview",
+            font=("Arial", 16, "bold"),
+            bg="black",
+            fg="white"
+        )
 
-            # Put frames side by side with horizontal centering
-            combined_width = frames[0].shape[1] + frames[1].shape[1]
-            x_offset = (SCREEN_WIDTH - combined_width) // 2
+    def select_camera(self, cam_key):
+        """Handle camera selection"""
+        if self.is_multiview_select_mode:
+            if cam_key not in self.multiview_selection:
+                self.multiview_selection.append(cam_key)
+                print(f"✅ Selected Camera {cam_key}")
+                
+            if len(self.multiview_selection) == 2:
+                self.switch_mode('multi', self.multiview_selection)
+                self.multiview_selection = []
+                self.is_multiview_select_mode = False
+                self.multiview_prompt.place_forget()
+        else:
+            self.switch_mode(cam_key)
+    
+    def start_multiview_select(self):
+        """Start multiview camera selection"""
+        self.multiview_selection = []
+        self.is_multiview_select_mode = True
+        self.multiview_prompt.place(relx=0.5, rely=0.5, anchor="center")
+        print("📺 Select two cameras for multiview")
+    
+    def update_camera_view(self):
+        """Update camera view with latest frame"""
+        try:
+            if self.current_mode == 'multi':
+                # Update both views for multiview
+                for i, cam_key in enumerate(self.active_cameras):
+                    ret, frame = self.camera_caps[cam_key].read()
+                    if ret:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        frame = self.resize_frame(frame, is_multiview=True)
+                        self.photo_images[cam_key] = ImageTk.PhotoImage(image=Image.fromarray(frame))
+                        if i == 0:
+                            self.left_view.configure(image=self.photo_images[cam_key])
+                        else:
+                            self.right_view.configure(image=self.photo_images[cam_key])
             
-            # Position frames at the top with consistent height
-            y_offset = 0
+            elif self.current_mode in ['1', '2', '3']:
+                # Update single view
+                cam_key = self.current_mode
+                ret, frame = self.camera_caps[cam_key].read()
+                if ret:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame = self.resize_frame(frame, is_multiview=False)
+                    self.photo_images[cam_key] = ImageTk.PhotoImage(image=Image.fromarray(frame))
+                    self.single_view.configure(image=self.photo_images[cam_key])
             
-            # Place frames on background
-            for i, frame in enumerate(frames):
-                x_pos = x_offset + (i * frames[0].shape[1])
-                background[y_offset:y_offset+frame.shape[0], x_pos:x_pos+frame.shape[1]] = frame
-
-            draw_ui(background)
-            cv2.imshow(window_name, background)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        for cap in caps:
+            # Continue update loop if not stopped
+            if not stop_thread:
+                self.after(30, self.update_camera_view)
+                
+        except Exception as e:
+            print(f"Camera update error: {e}")
+            self.after(100, self.update_camera_view)
+    
+    def resize_frame(self, frame, is_multiview=False):
+        """Resize the frame for display"""
+        h, w = frame.shape[:2]
+        target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height
+        
+        if is_multiview:
+            # For multiview, use half the screen width
+            target_width = SCREEN_WIDTH // 2
+        else:
+            target_width = SCREEN_WIDTH
+        
+        # Calculate scaling factors
+        scale_w = target_width / w
+        scale_h = target_height / h
+        scale = min(scale_w, scale_h)  # Maintain aspect ratio
+        
+        # Calculate new dimensions
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        
+        # Resize the frame
+        return cv2.resize(frame, (new_w, new_h))
+    
+    def switch_mode(self, mode, cam_keys=None):
+        """Switch between camera modes"""
+        global stop_thread
+        
+        # Stop existing camera threads
+        stop_thread = True
+        time.sleep(0.2)
+        stop_thread = False
+        
+        # Close existing camera captures
+        for cap in self.camera_caps.values():
             cap.release()
-
-    return threading.Thread(target=display)
-
-def show_single(cam_key):
-    global stop_thread
-    stop_thread = False
-    
-    print(f"🔎 Fullscreen view: Camera {cam_key}")
-    path = camera_paths[cam_key]
-    cap = cv2.VideoCapture(path)
-    if not cap.isOpened():
-        print(f"❌ Failed to open {path}")
-        return None
-
-    # Use the same window name as multiview for persistence
-    window_name = 'Camera View'
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    
-    # Important! Set mouse callback for touch events
-    cv2.setMouseCallback(window_name, handle_touch)
-    
-    # Show initial black background while loading
-    black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    cv2.imshow(window_name, black_bg)
-    cv2.waitKey(1)
-
-    def display():
-        while not stop_thread:
-            ret, frame = cap.read()
-            if not ret:
-                time.sleep(0.1)
-                continue
-            
-            # Calculate target height - use the same calculation method for all modes
-            target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
-            
-            # Get original frame dimensions
-            h, w = frame.shape[:2]
-            
-            # Calculate scaling factors
-            scale_w = SCREEN_WIDTH / w
-            scale_h = target_height / h
-            scale = min(scale_w, scale_h)  # Maintain aspect ratio
-            
-            # Calculate new dimensions
-            new_w = int(w * scale)
-            new_h = int(h * scale)
-            
-            # Resize the frame
-            frame = cv2.resize(frame, (new_w, new_h))
-            
-            # Create a black background image with screen dimensions
-            background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-            
-            # Calculate horizontal centering
-            x_offset = (SCREEN_WIDTH - new_w) // 2
-            
-            # Position at the top of the screen
-            y_offset = 0
-            
-            # Place the frame on the black background
-            background[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame
-            
-            draw_ui(background)
-            cv2.imshow(window_name, background)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-                
-        cap.release()
-
-    return threading.Thread(target=display)
-
-def switch_mode(mode, cam_keys=None):
-    global current_mode, stop_thread, display_thread
-
-    # Mark old thread for stopping but don't destroy window
-    stop_thread = True
-    if display_thread and display_thread.is_alive():
-        # Show a black frame before switching
-        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.imshow('Camera View', black_bg)
-        cv2.waitKey(1)
+        self.camera_caps.clear()
         
-        # Now wait for thread to finish
-        display_thread.join()
-
-    current_mode = mode
-
-    if mode == 'multi':
-        display_thread = show_multiview(cam_keys)
-    elif mode in ['1', '2', '3']:
-        display_thread = show_single(mode)
-    else:
-        return
-
-    display_thread.start()
+        self.current_mode = mode
+        
+        # Hide all views
+        self.single_view.pack_forget()
+        self.multi_view_frame.pack_forget()
+        
+        if mode == 'multi':
+            self.active_cameras = cam_keys
+            # Open the selected cameras
+            for cam_key in cam_keys:
+                self.camera_caps[cam_key] = cv2.VideoCapture(camera_paths[cam_key], cv2.CAP_V4L2)
+                self.camera_caps[cam_key].set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                self.camera_caps[cam_key].set(cv2.CAP_PROP_FPS, 30)
+            
+            # Show multiview frame
+            self.multi_view_frame.pack(expand=True, fill="both")
+            print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
+            
+        elif mode in ['1', '2', '3']:
+            # Open the selected camera
+            self.camera_caps[mode] = cv2.VideoCapture(camera_paths[mode], cv2.CAP_V4L2)
+            self.camera_caps[mode].set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+            self.camera_caps[mode].set(cv2.CAP_PROP_FPS, 30)
+            
+            # Show single view
+            self.single_view.pack(expand=True, fill="both")
+            print(f"🔎 Fullscreen view: Camera {mode}")
+        
+        # Start the update loop
+        self.update_camera_view()
+    
+    def handle_key(self, event):
+        """Handle keyboard shortcuts"""
+        key = event.char.lower() if hasattr(event, 'char') and event.char else ''
+        
+        # Fan control
+        if key in duty_lookup:
+            duty = duty_lookup[key]
+            fan.duty_cycle = duty
+            percent = int((duty / 0xFFFF) * 100)
+            print(f"[KEY '{key.upper()}'] → Fan speed set to {percent}%")
+            self.fan_speed_label.config(text=f"Current Fan: {percent}%")
+        
+        # Fullscreen camera mode
+        elif key in ['1', '2', '3'] and not self.is_multiview_select_mode:
+            self.switch_mode(key)
+        
+        # Enter multi-select mode
+        elif key == '0':
+            self.start_multiview_select()
+        
+        # Select cameras for multiview
+        elif self.is_multiview_select_mode and key in ['1', '2', '3']:
+            self.select_camera(key)
+    
+    def set_fan_speed(self, duty, key, text):
+        """Set fan speed when button is clicked"""
+        global fan
+        fan.duty_cycle = duty
+        percent = int((duty / 0xFFFF) * 100)
+        print(f"[FAN] → Set to {percent}% (key: {key.upper()})")
+        self.fan_speed_label.config(text=f"Current Fan: {text}")
+    
+    def quit_app(self, event=None):
+        """Clean up and exit application"""
+        global stop_thread
+        stop_thread = True
+        
+        # Stop all camera captures
+        for cap in self.camera_caps.values():
+            cap.release()
+            
+        # Turn off fan
+        fan.duty_cycle = 0x0000
+        pca.deinit()
+        
+        self.destroy()
+        os._exit(0)  # Force exit to ensure all threads are terminated
 
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
@@ -412,64 +358,15 @@ duty_lookup = {
     'h': 0xFFFF     # 100%
 }
 
-##### HOTKEYS #####
-def on_press(key):
-    global multiview_selection, current_mode
-
-    try:
-        if hasattr(key, 'char'):
-            c = key.char.lower()
-
-            # Fan control
-            if c in duty_lookup:
-                duty = duty_lookup[c]
-                fan.duty_cycle = duty
-                percent = int((duty / 0xFFFF) * 100)
-                print(f"[KEY '{c.upper()}'] → Fan speed set to {percent}%")
-
-            # Fullscreen camera mode
-            elif c in ['1', '2', '3'] and current_mode != 'multi_select':
-                switch_mode(c)
-
-            # Enter multi-select mode
-            elif c == '0':
-                print("📺 Entering multi-select mode: Press 2 camera numbers (1-3)")
-                multiview_selection = []
-                current_mode = 'multi_select'
-
-            # Select cameras for multiview
-            elif current_mode == 'multi_select' and c in ['1', '2', '3']:
-                if c not in multiview_selection:
-                    multiview_selection.append(c)
-                    print(f"✅ Selected Camera {c}")
-                if len(multiview_selection) == 2:
-                    switch_mode('multi', multiview_selection)
-                    multiview_selection = []
-
-    except Exception as e:
-        print(f"❗ Keyboard error: {e}")
-
-def on_release(key):
-    if key == keyboard.Key.esc:
-        print("👋 Exiting...")
-        fan.duty_cycle = 0x0000
-        pca.deinit()
-        global stop_thread
-        stop_thread = True
-        if display_thread and display_thread.is_alive():
-            display_thread.join()
-        return False  # This stops the keyboard listener
-
 ##### MAIN ENTRY POINT #####
 def main():
     print("🎥 Webcam viewer ready")
     print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
-
+    
+    app = CameraUI()
     # Auto-start in multiview mode with Cameras 1 and 2
-    switch_mode('multi', ['1', '2'])
-
-    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-        listener.join()
+    app.after(100, lambda: app.switch_mode('multi', ['1', '2']))
+    app.mainloop()
 
 if __name__ == "__main__":
     main()
