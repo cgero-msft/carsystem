@@ -1,5 +1,6 @@
-cgero88@raspberrypi:~ $ python3 UI.py 
+cgero88@raspberrypi:~ $ python3 UIsplit.py 
+📺 Using fixed resolution: 1024x600
 Traceback (most recent call last):
-  File "/home/cgero88/UI.py", line 78, in <module>
-    cam_fan_thread = threading.Thread(target=main, daemon=True)
-NameError: name 'main' is not defined
+  File "/home/cgero88/UIsplit.py", line 5, in <module>
+    from UnifiedTestStableFullscreen.py import main
+ModuleNotFoundError: No module named 'UnifiedTestStableFullscreen.py'; 'UnifiedTestStableFullscreen' is not a package
