@@ -126,86 +126,85 @@ class UIOverlay(threading.Thread):
         super().__init__(daemon=True)
         self.send_camera = send_camera
         self.send_fan = send_fan
-        self.root = None  # Will be initialized in run()
+        self.root = None
 
     def run(self):
-        self.root = tk.Tk()  # Store as instance variable
-        self.root.overrideredirect(True)  # No window decorations
-        self.root.attributes('-topmost', True)  # Keep on top
+        self.root = tk.Tk()
+        self.root.overrideredirect(True)
+        self.root.attributes('-topmost', True)
         
-        # Create a small panel at the bottom center of the screen
+        # Panel dimensions
         panel_width = 300
         panel_height = 60
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         
-        # Position the panel at the bottom center
+        # Position at bottom center
         self.root.geometry(f"{panel_width}x{panel_height}+{(screen_width-panel_width)//2}+{screen_height-panel_height-10}")
         
-        # Make it semi-transparent and visible
+        # Semi-transparent background
         self.root.configure(bg='#333333')
-        self.root.attributes('-alpha', 0.7)  # Semi-transparent
+        self.root.attributes('-alpha', 0.7)
         
-        # Function to handle button press with timed visual feedback
-        def handle_button_press(button, command):
-            # Execute the command
-            command()
-            
-            # Visual feedback for 50ms
-            original_bg = button.cget('bg')
-            button.config(bg="#00A0FF")  # Brighter blue when pressed
-            self.root.after(50, lambda: button.config(bg=original_bg))  # Use self.root
-        
-        # Set equal width for both buttons
+        # Equal width buttons
         button_width = 10
         
-        # Camera button
+        # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
             self.root, 
             text="Camera",
             bg="#0078D7",
             fg="white",
             font=("Arial", 12, "bold"),
-            width=button_width,
-            command=lambda: handle_button_press(camera_btn, self.show_camera_menu)
+            width=button_width
         )
+        # Bind click event directly
+        camera_btn.config(command=self.show_camera_menu)
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Fan button with same width
+        # Fan button (same direct binding)
         fan_btn = tk.Button(
             self.root, 
             text="Fan",
             bg="#0078D7", 
             fg="white",
             font=("Arial", 12, "bold"),
-            width=button_width,
-            command=lambda: handle_button_press(fan_btn, lambda: OverlayMenu(self.root, [
-                ('0%', lambda: self.send_fan('a')),
-                ('20%', lambda: self.send_fan('s')),
-                ('40%', lambda: self.send_fan('d')),
-                ('60%', lambda: self.send_fan('f')),
-                ('80%', lambda: self.send_fan('g')),
-                ('100%', lambda: self.send_fan('h'))
-            ]))
+            width=button_width
         )
+        # Bind click event directly
+        fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
+    # Separate method for showing fan menu
+    def show_fan_menu(self):
+        print("Fan button clicked")  # Debug print
+        OverlayMenu(self.root, [
+            ('0%', lambda: self.send_fan('a')),
+            ('20%', lambda: self.send_fan('s')),
+            ('40%', lambda: self.send_fan('d')),
+            ('60%', lambda: self.send_fan('f')),
+            ('80%', lambda: self.send_fan('g')),
+            ('100%', lambda: self.send_fan('h'))
+        ])
+
     def show_camera_menu(self):
-        OverlayMenu(self.root, [  # Now using self.root
+        print("Camera button clicked")  # Debug print
+        OverlayMenu(self.root, [
             ('Cam 1', lambda: self.send_camera('1')),
             ('Cam 2', lambda: self.send_camera('2')),
             ('Cam 3', lambda: self.send_camera('3')),
-            ('Multi', self.start_multiview)  # Pass the method reference directly
+            ('Multi', self.start_multiview)
         ])
 
     def start_multiview(self):
-        # Send the multiview keystroke '0'
+        print("Multi mode activated")  # Debug print
+        # Send the multiview keystroke
         self.send_camera('0')
         
         # Show camera selection overlay
-        OverlayMenu(self.root, [  # Now using self.root
+        OverlayMenu(self.root, [
             ('Cam 1', lambda: self.send_camera('1')),
             ('Cam 2', lambda: self.send_camera('2')),
             ('Cam 3', lambda: self.send_camera('3')),
