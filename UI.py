@@ -87,6 +87,13 @@ class OverlayMenu:
         self.timer_id = self.overlay.after(5000, self.destroy)
 
     def _handle_selection(self, cmd, text):
+        # Camera name to number mapping
+        camera_mapping = {
+            'Rowley': '1',
+            'Glow': '2',
+            'Brevity': '3'
+        }
+        
         if text == 'Multi':
             # Enter multiview selection mode
             self.multi_mode = True
@@ -104,9 +111,9 @@ class OverlayMenu:
             
             return  # Don't close the menu yet
             
-        elif self.multi_mode and text.startswith('Cam '):
+        elif self.multi_mode and text in camera_mapping:
             # We're in multiview mode and selecting cameras
-            cam_num = text.split(' ')[1]
+            cam_num = camera_mapping[text]  # Get camera number from name
             
             if cam_num in self.selected_cameras:
                 # Deselect camera
@@ -120,7 +127,7 @@ class OverlayMenu:
             
             # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
-                # FIXED: Send the camera keystrokes directly without any extra code
+                # Send the camera keystrokes
                 for cam_num in self.selected_cameras:
                     self.send_camera(cam_num)
                 
