@@ -87,51 +87,48 @@ class OverlayMenu:
         self.timer_id = self.overlay.after(5000, self.destroy)
 
     def _handle_selection(self, cmd, text):
+        # MULTIVIEW SELECTION LOGIC
         if text == 'Multi':
             # Enter multiview selection mode
             self.multi_mode = True
             self.selected_cameras = []
-            self.buttons['Multi'].config(bg="#00A0FF")  # Highlight Multi button
-            
-            # Update instructions
+            self.buttons['Multi'].config(bg="#00A0FF")  # Highlight button
             self.title_label.config(text="Select two cameras for multiview")
+            self.overlay.after_cancel(self.timer_id)  # Cancel auto-close
+            return  # Don't proceed further
             
-            # Reset the auto-destroy timer
-            self.overlay.after_cancel(self.timer_id)
-            
-            # NOTE: DON'T send the multiview keystroke '0' here!
-            # We'll send it only after cameras are selected
-            
-            return  # Don't close the menu yet
-            
+        # CAMERA SELECTION IN MULTIVIEW MODE    
         elif self.multi_mode and text.startswith('Cam '):
-            # We're in multiview mode and selecting cameras
             cam_num = text.split(' ')[1]
             
+            # Toggle selection
             if cam_num in self.selected_cameras:
-                # Deselect camera
                 self.selected_cameras.remove(cam_num)
-                self.buttons[text].config(bg="#444444")  # Reset to dark button color
+                self.buttons[text].config(bg="#444444")  # Reset color
             else:
-                # Select camera if we have room
+                # Add to selection if we have room
                 if len(self.selected_cameras) < 2:
                     self.selected_cameras.append(cam_num)
-                    self.buttons[text].config(bg="#00A0FF")  # Highlight selected
+                    self.buttons[text].config(bg="#00A0FF")  # Highlight
             
-            # If we selected two cameras, send the keystrokes and close
+            # Only trigger when we have exactly 2 cameras selected
             if len(self.selected_cameras) == 2:
-                # First send the multiview '0' keystroke
+                # First send multiview keystroke '0'
                 self.root._uioverlay.send_camera('0')
                 
-                # Then send each camera number keystroke
-                for cam_num in self.selected_cameras:
-                    self.root._uioverlay.send_camera(cam_num)
-                
-                # Close menu after a short delay
-                self.overlay.after(500, self.destroy)
+                # Then send camera keystrokes with delay
+                def send_sequential():
+                    for cam_num in self.selected_cameras:
+                        self.root._uioverlay.send_camera(cam_num)
+                        time.sleep(0.1)  # Small delay between keys
+                    self.destroy()  # Close menu after sending all keys
                     
-            return
+                # Schedule the sequential sending with a short delay
+                self.overlay.after(200, send_sequential)
             
+            return  # Important! Don't fall through to the default case
+            
+        # DEFAULT: NORMAL BUTTON CLICK
         else:
             # Normal mode - execute command and close
             cmd()
