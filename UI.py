@@ -110,9 +110,10 @@ class OverlayMenu:
             
             # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
-                # Send keystrokes for selected cameras
+                # FIXED: Don't try to get the command with cget, just send the keypresses directly
                 for cam_num in self.selected_cameras:
-                    self.buttons[f'Cam {cam_num}'].cget('command')()
+                    # Send the camera number directly instead of trying to call the button's command
+                    self.send_camera(cam_num)
                 
                 # Close menu after a short delay
                 self.overlay.after(500, self.destroy)
@@ -123,6 +124,13 @@ class OverlayMenu:
             # Normal mode - execute command and close
             cmd()
             self.destroy()
+        
+    # Add this method to OverlayMenu class
+    def send_camera(self, number):
+        """Send camera selection keypress"""
+        # This just forwards to the parent UIOverlay
+        if hasattr(self.root, '_uioverlay'):
+            self.root._uioverlay.send_camera(number)
 
     def destroy(self):
         if self.overlay.winfo_exists():
@@ -137,6 +145,8 @@ class UIOverlay(threading.Thread):
 
     def run(self):
         self.root = tk.Tk()
+        # Store reference to self for callbacks
+        self.root._uioverlay = self  
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         
