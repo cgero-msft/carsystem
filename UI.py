@@ -99,8 +99,8 @@ class OverlayMenu:
             # Reset the auto-destroy timer
             self.overlay.after_cancel(self.timer_id)
             
-            # First, send the multiview keystroke '0'
-            cmd()
+            # NOTE: DON'T send the multiview keystroke '0' here!
+            # We'll send it only after cameras are selected
             
             return  # Don't close the menu yet
             
@@ -111,23 +111,25 @@ class OverlayMenu:
             if cam_num in self.selected_cameras:
                 # Deselect camera
                 self.selected_cameras.remove(cam_num)
-                self.buttons[text].config(bg="SystemButtonFace")
+                self.buttons[text].config(bg="#444444")  # Reset to dark button color
             else:
                 # Select camera if we have room
                 if len(self.selected_cameras) < 2:
                     self.selected_cameras.append(cam_num)
-                    self.buttons[text].config(bg="#00A0FF")
+                    self.buttons[text].config(bg="#00A0FF")  # Highlight selected
             
             # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
-                # FIXED: Don't try to get the command with cget, just send the keypresses directly
+                # First send the multiview '0' keystroke
+                self.root._uioverlay.send_camera('0')
+                
+                # Then send each camera number keystroke
                 for cam_num in self.selected_cameras:
-                    # Send the camera number directly instead of trying to call the button's command
-                    self.send_camera(cam_num)
+                    self.root._uioverlay.send_camera(cam_num)
                 
                 # Close menu after a short delay
                 self.overlay.after(500, self.destroy)
-                
+                    
             return
             
         else:
