@@ -20,27 +20,30 @@ class OverlayMenu:
         self.overlay.attributes('-fullscreen', True)
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
-        self.overlay.configure(bg='white')
+        
+        # Changed: Dark background color
+        self.overlay.configure(bg='#222222')
         
         self.multi_mode = False
         self.selected_cameras = []
         self.buttons = {}
         
-        # Create frame for buttons
-        button_frame = tk.Frame(self.overlay, bg='white')
+        # Create frame for buttons with dark background
+        button_frame = tk.Frame(self.overlay, bg='#222222')
         button_frame.place(relx=0.5, rely=0.5, anchor='center')
         
-        # Create title/instructions label
+        # Create title/instructions label with light text on dark background
         self.title_label = tk.Label(
             button_frame, 
             text=title, 
             font=("Arial", 16, "bold"),
-            bg="white"
+            bg="#222222",
+            fg="white"  # White text
         )
         self.title_label.pack(pady=10)
         
-        # Create button frame for grid layout
-        btn_container = tk.Frame(button_frame, bg='white')
+        # Create button frame for grid layout with dark background
+        btn_container = tk.Frame(button_frame, bg='#222222')
         btn_container.pack()
         
         # Create buttons
@@ -55,20 +58,27 @@ class OverlayMenu:
                 width=12, 
                 height=3,
                 font=("Arial", 12),
+                # Darker button style
+                bg="#444444",
+                fg="white",
+                activebackground="#555555",
+                activeforeground="white",
                 command=lambda c=cmd, t=text: self._handle_selection(c, t)
             )
             btn.grid(row=row, column=col, padx=10, pady=10)
             self.buttons[text] = btn
         
-        # Add close button
+        # Add close button with darker style
         close_btn = tk.Button(
             button_frame, 
             text="Cancel", 
             width=12, 
             height=2,
             font=("Arial", 12),
-            bg="#777777",
+            bg="#555555",
             fg="white",
+            activebackground="#666666",
+            activeforeground="white",
             command=self.destroy
         )
         close_btn.pack(pady=20)
@@ -209,9 +219,9 @@ class UIOverlay(threading.Thread):
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print
         OverlayMenu(self.root, [
-            ('Cam 1', lambda: self.send_camera('1')),
-            ('Cam 2', lambda: self.send_camera('2')),
-            ('Cam 3', lambda: self.send_camera('3')),
+            ('Rowley', lambda: self.send_camera('1')),
+            ('Glow', lambda: self.send_camera('2')),
+            ('Brevity', lambda: self.send_camera('3')),
             ('Multi', lambda: self.send_camera('0'))
         ], title="Select Camera")
 
