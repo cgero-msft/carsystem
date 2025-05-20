@@ -14,24 +14,109 @@ from adafruit_pca9685 import PCA9685
 # We'll wrap the UI in a separate thread that only handles overlays.
 
 class OverlayMenu:
-    def __init__(self, root, buttons):
+    def __init__(self, root, buttons, is_multiview=False):
         self.root = root
         self.overlay = tk.Toplevel(root)
         self.overlay.attributes('-fullscreen', True)
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         self.overlay.configure(bg='white')
+        
+        self.is_multiview = is_multiview
+        self.selected_cameras = []
+        self.buttons = {}
+        
+        # Create frame for buttons
+        button_frame = tk.Frame(self.overlay, bg='white')
+        button_frame.place(relx=0.5, rely=0.5, anchor='center')
+        
+        # Create label for multiview instructions
+        if is_multiview:
+            instructions = tk.Label(
+                button_frame, 
+                text="Select two cameras for multiview", 
+                font=("Arial", 16, "bold"),
+                bg="white"
+            )
+            instructions.pack(pady=10)
+        
+        # Create button frame for grid layout
+        btn_container = tk.Frame(button_frame, bg='white')
+        btn_container.pack()
+        
+        # Create buttons
+        columns = min(4, len(buttons))
         for idx, (text, cmd) in enumerate(buttons):
-            btn = tk.Button(self.overlay, text=text, command=lambda c=cmd: self._select(c),
-                            width=12, height=3)
-            btn.place(relx=(idx+1)/(len(buttons)+1), rely=0.5, anchor='center')
-        self.overlay.after(5000, self.destroy)
+            row = idx // columns
+            col = idx % columns
+            
+            btn = tk.Button(
+                btn_container, 
+                text=text, 
+                width=12, 
+                height=3,
+                font=("Arial", 12),
+                command=lambda c=cmd, t=text, b=None: self._handle_selection(c, t, b)
+            )
+            btn.grid(row=row, column=col, padx=10, pady=10)
+            self.buttons[text] = btn
+        
+        # Add close button for multiview
+        if is_multiview:
+            close_btn = tk.Button(
+                button_frame, 
+                text="Cancel", 
+                width=12, 
+                height=2,
+                font=("Arial", 12),
+                bg="#777777",
+                fg="white",
+                command=self.destroy
+            )
+            close_btn.pack(pady=20)
+        
+        # Auto-destroy if not is_multiview
+        if not is_multiview:
+            self.overlay.after(5000, self.destroy)
 
-    def _select(self, cmd):
+    def _handle_selection(self, cmd, text, button):
+        if not self.is_multiview:
+            # Regular menu - execute and close
+            cmd()
+            self.destroy()
+        else:
+            # Multiview selection - track selections
+            if text.startswith('Cam '):
+                cam_num = text.split(' ')[1]
+                
+                # Toggle selection
+                if cam_num in self.selected_cameras:
+                    self.selected_cameras.remove(cam_num)
+                    self.buttons[text].config(bg="SystemButtonFace")  # Reset to default color
+                else:
+                    # Add to selection if we have room
+                    if len(self.selected_cameras) < 2:
+                        self.selected_cameras.append(cam_num)
+                        self.buttons[text].config(bg="#00A0FF")  # Highlight selected
+                
+                # If we have 2 selected, trigger multiview
+                if len(self.selected_cameras) == 2:
+                    self.root.after(500, self._trigger_multiview)
+    
+    def _trigger_multiview(self):
+        # First send the multiview keystroke
+        cmd = self.buttons['Multi'].cget('command')
         cmd()
+        
+        # Then send each camera keystroke
+        for cam_num in self.selected_cameras:
+            cam_btn_text = f'Cam {cam_num}'
+            cmd = self.buttons[cam_btn_text].cget('command')
+            cmd()
+        
+        # Finally close
         self.destroy()
-
-    def show(self): pass  # already visible on init
+    
     def destroy(self):
         if self.overlay.winfo_exists():
             self.overlay.destroy()
@@ -81,12 +166,7 @@ class UIOverlay(threading.Thread):
             fg="white",
             font=("Arial", 12, "bold"),
             width=button_width,
-            command=lambda: handle_button_press(camera_btn, lambda: OverlayMenu(root, [
-                ('Cam 1', lambda: self.send_camera('1')),
-                ('Cam 2', lambda: self.send_camera('2')),
-                ('Cam 3', lambda: self.send_camera('3')),
-                ('Multi', lambda: self.send_camera('0'))
-            ]))
+            command=lambda: handle_button_press(camera_btn, self.show_camera_menu)
         )
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
@@ -110,6 +190,25 @@ class UIOverlay(threading.Thread):
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         root.mainloop()
+
+    def show_camera_menu(self):
+        OverlayMenu(root, [
+            ('Cam 1', lambda: self.send_camera('1')),
+            ('Cam 2', lambda: self.send_camera('2')),
+            ('Cam 3', lambda: self.send_camera('3')),
+            ('Multi', lambda: self.start_multiview())
+        ])
+
+    def start_multiview(self):
+        # Send the multiview keystroke '0'
+        self.send_camera('0')
+        
+        # Show camera selection overlay
+        OverlayMenu(root, [
+            ('Cam 1', lambda: self.send_camera('1')),
+            ('Cam 2', lambda: self.send_camera('2')),
+            ('Cam 3', lambda: self.send_camera('3')),
+        ], is_multiview=True)
 
 if __name__=='__main__':
     # Start your cv2 camera+fan process in main thread
