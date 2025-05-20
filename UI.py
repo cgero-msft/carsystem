@@ -21,7 +21,7 @@ class OverlayMenu:
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         
-        # Changed: Dark background color
+        # Dark background color
         self.overlay.configure(bg='#222222')
         
         self.multi_mode = False
@@ -87,48 +87,48 @@ class OverlayMenu:
         self.timer_id = self.overlay.after(5000, self.destroy)
 
     def _handle_selection(self, cmd, text):
-        # MULTIVIEW SELECTION LOGIC
         if text == 'Multi':
             # Enter multiview selection mode
             self.multi_mode = True
             self.selected_cameras = []
-            self.buttons['Multi'].config(bg="#00A0FF")  # Highlight button
-            self.title_label.config(text="Select two cameras for multiview")
-            self.overlay.after_cancel(self.timer_id)  # Cancel auto-close
-            return  # Don't proceed further
+            self.buttons['Multi'].config(bg="#00A0FF")  # Highlight Multi button
             
-        # CAMERA SELECTION IN MULTIVIEW MODE    
+            # Update instructions
+            self.title_label.config(text="Select two cameras for multiview")
+            
+            # Reset the auto-destroy timer
+            self.overlay.after_cancel(self.timer_id)
+            
+            # First, send the multiview keystroke '0'
+            cmd()
+            
+            return  # Don't close the menu yet
+            
         elif self.multi_mode and text.startswith('Cam '):
+            # We're in multiview mode and selecting cameras
             cam_num = text.split(' ')[1]
             
-            # Toggle selection
             if cam_num in self.selected_cameras:
+                # Deselect camera
                 self.selected_cameras.remove(cam_num)
-                self.buttons[text].config(bg="#444444")  # Reset color
+                self.buttons[text].config(bg="#444444")  # Reset to dark button color
             else:
-                # Add to selection if we have room
+                # Select camera if we have room
                 if len(self.selected_cameras) < 2:
                     self.selected_cameras.append(cam_num)
-                    self.buttons[text].config(bg="#00A0FF")  # Highlight
+                    self.buttons[text].config(bg="#00A0FF")
             
-            # Only trigger when we have exactly 2 cameras selected
+            # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
-                # First send multiview keystroke '0'
-                self.root._uioverlay.send_camera('0')
+                # FIXED: Send the camera keystrokes directly without any extra code
+                for cam_num in self.selected_cameras:
+                    self.send_camera(cam_num)
                 
-                # Then send camera keystrokes with delay
-                def send_sequential():
-                    for cam_num in self.selected_cameras:
-                        self.root._uioverlay.send_camera(cam_num)
-                        time.sleep(0.1)  # Small delay between keys
-                    self.destroy()  # Close menu after sending all keys
-                    
-                # Schedule the sequential sending with a short delay
-                self.overlay.after(200, send_sequential)
+                # Close menu after a short delay
+                self.overlay.after(500, self.destroy)
+                
+            return
             
-            return  # Important! Don't fall through to the default case
-            
-        # DEFAULT: NORMAL BUTTON CLICK
         else:
             # Normal mode - execute command and close
             cmd()
@@ -137,7 +137,7 @@ class OverlayMenu:
     # Add this method to OverlayMenu class
     def send_camera(self, number):
         """Send camera selection keypress"""
-        # This just forwards to the parent UIOverlay
+        # This forwards to the parent UIOverlay
         if hasattr(self.root, '_uioverlay'):
             self.root._uioverlay.send_camera(number)
 
@@ -218,9 +218,9 @@ class UIOverlay(threading.Thread):
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print
         OverlayMenu(self.root, [
-            ('Rowley', lambda: self.send_camera('1')),
-            ('Glow', lambda: self.send_camera('2')),
-            ('Brevity', lambda: self.send_camera('3')),
+            ('Cam 1', lambda: self.send_camera('1')),
+            ('Cam 2', lambda: self.send_camera('2')),
+            ('Cam 3', lambda: self.send_camera('3')),
             ('Multi', lambda: self.send_camera('0'))
         ], title="Select Camera")
 
