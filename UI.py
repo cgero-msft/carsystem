@@ -218,9 +218,9 @@ class UIOverlay(threading.Thread):
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print
         OverlayMenu(self.root, [
-            ('Cam 1', lambda: self.send_camera('1')),
-            ('Cam 2', lambda: self.send_camera('2')),
-            ('Cam 3', lambda: self.send_camera('3')),
+            ('Rowley', lambda: self.send_camera('1')),
+            ('Glow', lambda: self.send_camera('2')),
+            ('Brevity', lambda: self.send_camera('3')),
             ('Multi', lambda: self.send_camera('0'))
         ], title="Select Camera")
 
