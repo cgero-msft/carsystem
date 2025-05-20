@@ -44,48 +44,54 @@ class UIOverlay(threading.Thread):
 
     def run(self):
         root = tk.Tk()
+        root.overrideredirect(True)  # No window decorations
+        root.attributes('-topmost', True)  # Keep on top
         
-        # Get screen dimensions to ensure we cover the entire display
+        # Create a small panel at the bottom center of the screen
+        panel_width = 300
+        panel_height = 60
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
-        root.geometry(f"{screen_width}x{screen_height}+0+0")
         
-        # Set to fullscreen and remove window decorations
-        root.attributes('-fullscreen', True)
-        root.overrideredirect(True)
+        # Position the panel at the bottom center
+        root.geometry(f"{panel_width}x{panel_height}+{(screen_width-panel_width)//2}+{screen_height-panel_height-10}")
         
-        # Make it nearly invisible (0.01 is practically invisible but still captures clicks)
-        root.attributes('-alpha', 0.01)  # Almost completely transparent
+        # Make it semi-transparent and visible
+        root.configure(bg='#333333')
+        root.attributes('-alpha', 0.7)  # Semi-transparent
         
-        # Black background (which will be nearly invisible with alpha=0.01)
-        root.configure(bg='black')
-        
-        # Add optional visual indicator for clicks (helpful for debugging)
-        click_indicator = tk.Label(root, text="", bg="black")
-        click_indicator.place(x=0, y=0)
-        
-        def show_click(e):
-            # Optional: briefly show where the click happened for debugging
-            click_indicator.config(text="●", fg="red")
-            click_indicator.place(x=e.x, y=e.y)
-            root.after(200, lambda: click_indicator.config(text=""))
-            # Show the main menu
-            show_main(e)
-        
-        # Rest of your code remains the same
-        def show_main(e=None):
-            OverlayMenu(root, [
-                ('Cameras', show_camera),
-                ('Fans',    show_fans)
+        # Create two buttons side by side
+        camera_btn = tk.Button(
+            root, 
+            text="Camera",
+            bg="#0078D7",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            command=lambda: OverlayMenu(root, [
+                ('Cam 1', lambda: self.send_camera('1')),
+                ('Cam 2', lambda: self.send_camera('2')),
+                ('Cam 3', lambda: self.send_camera('3')),
+                ('Multi', lambda: self.send_camera('0'))
             ])
-            
-        # Other functions remain the same...
+        )
+        camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Bind click event to our enhanced handler to show feedback
-        root.bind('<Button-1>', show_click)
-        
-        # Make sure the window stays on top
-        root.attributes('-topmost', True)
+        fan_btn = tk.Button(
+            root, 
+            text="Fan",
+            bg="#0078D7", 
+            fg="white",
+            font=("Arial", 12, "bold"),
+            command=lambda: OverlayMenu(root, [
+                ('0%', lambda: self.send_fan('a')),
+                ('20%', lambda: self.send_fan('s')),
+                ('40%', lambda: self.send_fan('d')),
+                ('60%', lambda: self.send_fan('f')),
+                ('80%', lambda: self.send_fan('g')),
+                ('100%', lambda: self.send_fan('h'))
+            ])
+        )
+        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         root.mainloop()
 
