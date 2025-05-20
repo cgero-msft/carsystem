@@ -126,24 +126,25 @@ class UIOverlay(threading.Thread):
         super().__init__(daemon=True)
         self.send_camera = send_camera
         self.send_fan = send_fan
+        self.root = None  # Will be initialized in run()
 
     def run(self):
-        root = tk.Tk()
-        root.overrideredirect(True)  # No window decorations
-        root.attributes('-topmost', True)  # Keep on top
+        self.root = tk.Tk()  # Store as instance variable
+        self.root.overrideredirect(True)  # No window decorations
+        self.root.attributes('-topmost', True)  # Keep on top
         
         # Create a small panel at the bottom center of the screen
         panel_width = 300
         panel_height = 60
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
         
         # Position the panel at the bottom center
-        root.geometry(f"{panel_width}x{panel_height}+{(screen_width-panel_width)//2}+{screen_height-panel_height-10}")
+        self.root.geometry(f"{panel_width}x{panel_height}+{(screen_width-panel_width)//2}+{screen_height-panel_height-10}")
         
         # Make it semi-transparent and visible
-        root.configure(bg='#333333')
-        root.attributes('-alpha', 0.7)  # Semi-transparent
+        self.root.configure(bg='#333333')
+        self.root.attributes('-alpha', 0.7)  # Semi-transparent
         
         # Function to handle button press with timed visual feedback
         def handle_button_press(button, command):
@@ -153,14 +154,14 @@ class UIOverlay(threading.Thread):
             # Visual feedback for 50ms
             original_bg = button.cget('bg')
             button.config(bg="#00A0FF")  # Brighter blue when pressed
-            root.after(50, lambda: button.config(bg=original_bg))  # Return to normal after 50ms
+            self.root.after(50, lambda: button.config(bg=original_bg))  # Use self.root
         
         # Set equal width for both buttons
         button_width = 10
         
         # Camera button
         camera_btn = tk.Button(
-            root, 
+            self.root, 
             text="Camera",
             bg="#0078D7",
             fg="white",
@@ -172,13 +173,13 @@ class UIOverlay(threading.Thread):
         
         # Fan button with same width
         fan_btn = tk.Button(
-            root, 
+            self.root, 
             text="Fan",
             bg="#0078D7", 
             fg="white",
             font=("Arial", 12, "bold"),
             width=button_width,
-            command=lambda: handle_button_press(fan_btn, lambda: OverlayMenu(root, [
+            command=lambda: handle_button_press(fan_btn, lambda: OverlayMenu(self.root, [
                 ('0%', lambda: self.send_fan('a')),
                 ('20%', lambda: self.send_fan('s')),
                 ('40%', lambda: self.send_fan('d')),
@@ -189,14 +190,14 @@ class UIOverlay(threading.Thread):
         )
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        root.mainloop()
+        self.root.mainloop()
 
     def show_camera_menu(self):
-        OverlayMenu(root, [
+        OverlayMenu(self.root, [  # Now using self.root
             ('Cam 1', lambda: self.send_camera('1')),
             ('Cam 2', lambda: self.send_camera('2')),
             ('Cam 3', lambda: self.send_camera('3')),
-            ('Multi', lambda: self.start_multiview())
+            ('Multi', self.start_multiview)  # Pass the method reference directly
         ])
 
     def start_multiview(self):
@@ -204,7 +205,7 @@ class UIOverlay(threading.Thread):
         self.send_camera('0')
         
         # Show camera selection overlay
-        OverlayMenu(root, [
+        OverlayMenu(self.root, [  # Now using self.root
             ('Cam 1', lambda: self.send_camera('1')),
             ('Cam 2', lambda: self.send_camera('2')),
             ('Cam 3', lambda: self.send_camera('3')),
