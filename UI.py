@@ -1,4 +1,3 @@
-```python
 import tkinter as tk
 from PIL import Image, ImageTk
 import cv2
@@ -228,4 +227,3 @@ class UIApp:
 if __name__ == '__main__':
     app = UIApp()
     app.run()
-```
