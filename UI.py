@@ -60,36 +60,52 @@ class UIOverlay(threading.Thread):
         root.configure(bg='#333333')
         root.attributes('-alpha', 0.7)  # Semi-transparent
         
-        # Create two buttons side by side
+        # Function to handle button press with timed visual feedback
+        def handle_button_press(button, command):
+            # Execute the command
+            command()
+            
+            # Visual feedback for 50ms
+            original_bg = button.cget('bg')
+            button.config(bg="#00A0FF")  # Brighter blue when pressed
+            root.after(50, lambda: button.config(bg=original_bg))  # Return to normal after 50ms
+        
+        # Set equal width for both buttons
+        button_width = 10
+        
+        # Camera button
         camera_btn = tk.Button(
             root, 
             text="Camera",
             bg="#0078D7",
             fg="white",
             font=("Arial", 12, "bold"),
-            command=lambda: OverlayMenu(root, [
+            width=button_width,
+            command=lambda: handle_button_press(camera_btn, lambda: OverlayMenu(root, [
                 ('Cam 1', lambda: self.send_camera('1')),
                 ('Cam 2', lambda: self.send_camera('2')),
                 ('Cam 3', lambda: self.send_camera('3')),
                 ('Multi', lambda: self.send_camera('0'))
-            ])
+            ]))
         )
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
+        # Fan button with same width
         fan_btn = tk.Button(
             root, 
             text="Fan",
             bg="#0078D7", 
             fg="white",
             font=("Arial", 12, "bold"),
-            command=lambda: OverlayMenu(root, [
+            width=button_width,
+            command=lambda: handle_button_press(fan_btn, lambda: OverlayMenu(root, [
                 ('0%', lambda: self.send_fan('a')),
                 ('20%', lambda: self.send_fan('s')),
                 ('40%', lambda: self.send_fan('d')),
                 ('60%', lambda: self.send_fan('f')),
                 ('80%', lambda: self.send_fan('g')),
                 ('100%', lambda: self.send_fan('h'))
-            ])
+            ]))
         )
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
