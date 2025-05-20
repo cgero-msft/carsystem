@@ -79,49 +79,39 @@ def show_multiview(cam_keys):
         cv2.imshow(window_name, black_bg)
         cv2.waitKey(1)
 
+        # Calculate exact half width for each camera
+        half_width = SCREEN_WIDTH // 2
+
         while not stop_thread:
             # Create a fresh black background for each frame
             background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
             
-            frames = []
-            for cap, k in zip(caps, cam_keys):
+            for i, (cap, k) in enumerate(zip(caps, cam_keys)):
                 ret, frame = cap.read()
                 if not ret:
                     print(f"⚠️ Camera {k} failed to read")
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 
-                # Calculate target height - use the same calculation method for all modes
-                target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
-                
-                # Resize to half screen width and target height maintaining aspect ratio
+                # Get original frame dimensions
                 h, w = frame.shape[:2]
-                half_width = SCREEN_WIDTH // 2
                 
-                # Calculate scaling factors
+                # Calculate scaling factors to fit exactly half screen width and full height
                 scale_w = half_width / w
-                scale_h = target_height / h
+                scale_h = SCREEN_HEIGHT / h
                 scale = min(scale_w, scale_h)  # Maintain aspect ratio
                 
-                # Calculate new dimensions
+                # Resize frame
                 new_w = int(w * scale)
                 new_h = int(h * scale)
-                
-                # Resize the frame
                 frame = cv2.resize(frame, (new_w, new_h))
                 
-                frames.append(frame)
-
-            # Put frames side by side with horizontal centering
-            combined_width = frames[0].shape[1] + frames[1].shape[1]
-            x_offset = (SCREEN_WIDTH - combined_width) // 2
-            
-            # Position frames at the top with consistent height
-            y_offset = 0
-            
-            # Place frames on background
-            for i, frame in enumerate(frames):
-                x_pos = x_offset + (i * frames[0].shape[1])
-                background[y_offset:y_offset+frame.shape[0], x_pos:x_pos+frame.shape[1]] = frame
+                # Calculate position to center within its half
+                x_start = i * half_width
+                x_offset = x_start + ((half_width - new_w) // 2)
+                y_offset = (SCREEN_HEIGHT - new_h) // 2
+                
+                # Place frame on background
+                background[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame
 
             cv2.imshow(window_name, background)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -160,15 +150,12 @@ def show_single(cam_key):
                 time.sleep(0.1)
                 continue
             
-            # Calculate target height - use the same calculation method for all modes
-            target_height = SCREEN_HEIGHT // 3 * 2  # Use 2/3 of screen height consistently
-            
             # Get original frame dimensions
             h, w = frame.shape[:2]
             
-            # Calculate scaling factors
+            # Calculate scaling factors - use full screen dimensions
             scale_w = SCREEN_WIDTH / w
-            scale_h = target_height / h
+            scale_h = SCREEN_HEIGHT / h
             scale = min(scale_w, scale_h)  # Maintain aspect ratio
             
             # Calculate new dimensions
@@ -181,11 +168,9 @@ def show_single(cam_key):
             # Create a black background image with screen dimensions
             background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
             
-            # Calculate horizontal centering
+            # Calculate centering offsets
             x_offset = (SCREEN_WIDTH - new_w) // 2
-            
-            # Position at the top of the screen
-            y_offset = 0
+            y_offset = (SCREEN_HEIGHT - new_h) // 2
             
             # Place the frame on the black background
             background[y_offset:y_offset+new_h, x_offset:x_offset+new_w] = frame
