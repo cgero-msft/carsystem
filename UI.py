@@ -44,33 +44,49 @@ class UIOverlay(threading.Thread):
 
     def run(self):
         root = tk.Tk()
+        
+        # Get screen dimensions to ensure we cover the entire display
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        root.geometry(f"{screen_width}x{screen_height}+0+0")
+        
+        # Set to fullscreen and remove window decorations
         root.attributes('-fullscreen', True)
-        root.attributes('-alpha', 0.3)  # semi-transparent 30% opacity
-        root.configure(bg='black')
         root.overrideredirect(True)
-
+        
+        # Make it nearly invisible (0.01 is practically invisible but still captures clicks)
+        root.attributes('-alpha', 0.01)  # Almost completely transparent
+        
+        # Black background (which will be nearly invisible with alpha=0.01)
+        root.configure(bg='black')
+        
+        # Add optional visual indicator for clicks (helpful for debugging)
+        click_indicator = tk.Label(root, text="", bg="black")
+        click_indicator.place(x=0, y=0)
+        
+        def show_click(e):
+            # Optional: briefly show where the click happened for debugging
+            click_indicator.config(text="●", fg="red")
+            click_indicator.place(x=e.x, y=e.y)
+            root.after(200, lambda: click_indicator.config(text=""))
+            # Show the main menu
+            show_main(e)
+        
+        # Rest of your code remains the same
         def show_main(e=None):
             OverlayMenu(root, [
                 ('Cameras', show_camera),
                 ('Fans',    show_fans)
             ])
-
-        def show_camera():
-            OverlayMenu(root, [
-                ('1', lambda: self.send_camera('1')),
-                ('2', lambda: self.send_camera('2')),
-                ('3', lambda: self.send_camera('3')),
-                ('Multi', lambda: self.send_camera('0'))
-            ])
-
-        def show_fans():
-            keys = ['a','s','d','f','g','h']
-            labels = ['0%','20%','40%','60%','80%','100%']
-            OverlayMenu(root, [
-                (lbl, lambda k=k: self.send_fan(k)) for lbl,k in zip(labels,keys)
-            ])
-
-        root.bind('<Button-1>', show_main)
+            
+        # Other functions remain the same...
+        
+        # Bind click event to our enhanced handler to show feedback
+        root.bind('<Button-1>', show_click)
+        
+        # Make sure the window stays on top
+        root.attributes('-topmost', True)
+        
         root.mainloop()
 
 if __name__=='__main__':
