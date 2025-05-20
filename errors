@@ -1,6 +1,19 @@
 cgero88@raspberrypi:~ $ python3 UIsplit.py 
 📺 Using fixed resolution: 1024x600
+🎥 Webcam viewer ready
+🕹️  Hotkeys:
+  - 1/2/3 = Fullscreen view
+  - 0 + two cameras = Multiview
+  - A/S/D/F/G/H = Fan speed
+  - ESC = Quit
+📷 Showing multiview: Camera 1 and Camera 2
+Exception in thread Thread-2:
 Traceback (most recent call last):
-  File "/home/cgero88/UIsplit.py", line 5, in <module>
-    from UnifiedTestStableFullscreen.py import main
-ModuleNotFoundError: No module named 'UnifiedTestStableFullscreen.py'; 'UnifiedTestStableFullscreen' is not a package
+  File "/usr/lib/python3.9/threading.py", line 954, in _bootstrap_inner
+    self.run()
+  File "/home/cgero88/UIsplit.py", line 40, in run
+    root.attributes('-transparentcolor', TRANSPARENT_COLOR)
+  File "/usr/lib/python3.9/tkinter/__init__.py", line 1976, in wm_attributes
+    return self.tk.call(args)
+_tkinter.TclError: bad attribute "-transparentcolor": must be -alpha, -topmost, -zoomed, -fullscreen, or -type
+👋 Exiting...
