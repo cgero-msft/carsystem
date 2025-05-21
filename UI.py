@@ -114,17 +114,17 @@ class OverlayMenu:
                     btn = tk.Button(
                         btn_container, 
                         text=text, 
-                        width=18,  # 1.5x wider (was 24)
-                        height=4,  # Reduced from 6 to 4
-                        font=("Arial", 14, "bold"),  # Slightly smaller font
-                        # Match hover colors to regular colors
+                        width=18,  # 1.5x wider
+                        height=4,  # Reduced height
+                        font=("Arial", 14, "bold"),
+                        # IMPORTANT: Remove hover effects completely
                         bg="#444444",
                         fg="white",
-                        activebackground="#444444",  # Same as bg
-                        activeforeground="white",    # Same as fg
+                        activebackground="#444444",  # Same as background
+                        activeforeground="white",
                         command=lambda c=cmd, t=text: self._handle_selection(c, t)
                     )
-                    btn.grid(row=row, column=col, padx=12, pady=12)  # Slightly less padding
+                    btn.grid(row=row, column=col, padx=12, pady=12)
                     self.buttons[text] = btn
                 else:
                     # Regular sized button (unchanged)
@@ -220,8 +220,23 @@ class OverlayMenu:
             # Enter multiview selection mode
             self.multi_mode = True
             self.selected_cameras = []
-            self.buttons['Multi'].config(bg="#00A0FF")  # Highlight Multi button
-            self.overlay.update_idletasks()  # Force immediate UI update
+            
+            # Update ALL camera buttons to reset state first
+            for btn_text in ['Rowley', 'Glow', 'Brevity', 'Multi']:
+                if btn_text in self.buttons:
+                    self.buttons[btn_text].config(
+                        bg="#444444",
+                        activebackground="#444444"  # Important for touchscreen
+                    )
+            
+            # Then highlight just the Multi button
+            self.buttons['Multi'].config(
+                bg="#00A0FF",
+                activebackground="#00A0FF"  # Important for touchscreen
+            )
+            
+            # Force UI update
+            self.overlay.update()  # Full update instead of just idletasks
             
             # Update instructions
             self.title_label.config(text="Select two cameras for multiview")
@@ -241,14 +256,20 @@ class OverlayMenu:
             if cam_num in self.selected_cameras:
                 # Deselect camera
                 self.selected_cameras.remove(cam_num)
-                self.buttons[text].config(bg="#444444")  # Reset to dark button color
-                self.overlay.update_idletasks()  # Force immediate UI update
+                self.buttons[text].config(
+                    bg="#444444",
+                    activebackground="#444444"  # Important for touchscreen
+                )
+                self.overlay.update()  # Full update
             else:
                 # Select camera if we have room
                 if len(self.selected_cameras) < 2:
                     self.selected_cameras.append(cam_num)
-                    self.buttons[text].config(bg="#00A0FF")
-                    self.overlay.update_idletasks()  # Force immediate UI update
+                    self.buttons[text].config(
+                        bg="#00A0FF",
+                        activebackground="#00A0FF"  # Important for touchscreen
+                    )
+                    self.overlay.update()  # Full update
             
             # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
