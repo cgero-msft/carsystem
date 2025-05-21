@@ -21,9 +21,6 @@ class OverlayMenu:
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         
-        # Hide the cursor in the overlay window
-        self.overlay.config(cursor="none")  # Hide the mouse cursor
-        
         # Hide the main menu when opening this overlay
         if hasattr(root, '_uioverlay'):
             root._uioverlay.hide_main_menu()
@@ -371,9 +368,6 @@ class UIOverlay(threading.Thread):
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         
-        # Hide the cursor in the main window
-        self.root.config(cursor="none")  # Hide the mouse cursor
-        
         # Panel dimensions
         panel_width = 300
         panel_height = 60
@@ -399,8 +393,7 @@ class UIOverlay(threading.Thread):
             activebackground="#0078D7",  # Same as bg
             activeforeground="white",    # Same as fg
             font=("Arial", 12, "bold"),
-            width=button_width,
-            cursor="none"  # Hide cursor on button too
+            width=button_width
         )
         # Bind click event directly
         camera_btn.config(command=self.show_camera_menu)
@@ -415,19 +408,11 @@ class UIOverlay(threading.Thread):
             activebackground="#0078D7",  # Same as bg
             activeforeground="white",    # Same as fg
             font=("Arial", 12, "bold"),
-            width=button_width,
-            cursor="none"  # Hide cursor on button too
+            width=button_width
         )
         # Bind click event directly
         fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        
-        # Add global binding to ensure cursor stays hidden
-        def ensure_cursor_hidden(event):
-            self.root.config(cursor="none")
-        
-        # Bind to any mouse movement to ensure cursor stays hidden
-        self.root.bind("<Motion>", ensure_cursor_hidden)
         
         self.root.mainloop()
 
