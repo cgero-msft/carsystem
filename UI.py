@@ -43,8 +43,8 @@ class OverlayMenu:
         
         # Position the button frame higher for fan control grid
         if is_fan_grid:
-            # For Fan Control, place frame higher (40% down instead of 50%)
-            button_frame.place(relx=0.5, rely=0.4, anchor='center')
+            # For Fan Control, place frame higher (45% down instead of 50%)
+            button_frame.place(relx=0.5, rely=0.45, anchor='center')
         else:
             # Standard position for other menus
             button_frame.place(relx=0.5, rely=0.5, anchor='center')
