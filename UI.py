@@ -210,17 +210,38 @@ class UIOverlay(threading.Thread):
         
         self.root.mainloop()
 
-    # Separate method for showing fan menu
-    def show_fan_menu(self):
-        print("Fan button clicked")  # Debug print
-        OverlayMenu(self.root, [
-            ('0%', lambda: self.send_fan('a')),
-            ('20%', lambda: self.send_fan('s')),
-            ('40%', lambda: self.send_fan('d')),
-            ('60%', lambda: self.send_fan('f')),
-            ('80%', lambda: self.send_fan('g')),
-            ('100%', lambda: self.send_fan('h'))
-        ])
+    # Separate method for showing fan menu, 3 fan method
+def show_fan_menu(self):
+    print("Fan button clicked")  # Debug print
+    OverlayMenu(self.root, [
+        ('Fan 1', lambda: self.show_fan1_menu()),
+        ('Fan 2', lambda: self.show_fan2_menu()),
+        ('Fan 3', lambda: self.show_fan3_menu())
+    ], title="Select Fan")
+
+def show_fan1_menu(self):
+    OverlayMenu(self.root, [
+        ('0%', lambda: self.send_fan('a')),
+        ('33%', lambda: self.send_fan('s')),
+        ('66%', lambda: self.send_fan('d')),
+        ('100%', lambda: self.send_fan('f'))
+    ], title="Fan 1 Speed")
+    
+def show_fan2_menu(self):
+    OverlayMenu(self.root, [
+        ('0%', lambda: self.send_fan('g')),
+        ('33%', lambda: self.send_fan('h')),
+        ('66%', lambda: self.send_fan('j')),
+        ('100%', lambda: self.send_fan('k'))
+    ], title="Fan 2 Speed")
+    
+def show_fan3_menu(self):
+    OverlayMenu(self.root, [
+        ('0%', lambda: self.send_fan('z')),
+        ('33%', lambda: self.send_fan('x')),
+        ('66%', lambda: self.send_fan('c')),
+        ('100%', lambda: self.send_fan('v'))
+    ], title="Fan 3 Speed")
 
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print

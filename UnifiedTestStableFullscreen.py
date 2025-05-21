@@ -254,15 +254,39 @@ def switch_mode(mode, cam_keys=None):
 i2c = busio.I2C(SCL, SDA)
 pca = PCA9685(i2c)
 pca.frequency = 250
-fan = pca.channels[0]
 
+# Create three fan channel objects
+fans = {
+    0: pca.channels[0],  # Fan 1
+    1: pca.channels[1],  # Fan 2
+    2: pca.channels[2]   # Fan 3
+}
+
+# Hex values for different duty cycles
+DUTY_0   = 0x0000  # 0%
+DUTY_33  = 0x5555  # 33%
+DUTY_66  = 0xAAAA  # 66%
+DUTY_100 = 0xFFFF  # 100%
+
+# Map keys to (fan channel, duty cycle)
 duty_lookup = {
-    'a': 0x0000,    # 0%
-    's': 0x3333,    # 20%
-    'd': 0x6666,    # 40%
-    'f': 0x9999,    # 60%
-    'g': 0xCCCC,    # 80%
-    'h': 0xFFFF     # 100%
+    # Fan 1 (PCA channel 0)
+    'a': (0, DUTY_0),    # 0%
+    's': (0, DUTY_33),   # 33%
+    'd': (0, DUTY_66),   # 66%
+    'f': (0, DUTY_100),  # 100%
+    
+    # Fan 2 (PCA channel 1)
+    'g': (1, DUTY_0),    # 0%
+    'h': (1, DUTY_33),   # 33%
+    'j': (1, DUTY_66),   # 66%
+    'k': (1, DUTY_100),  # 100%
+    
+    # Fan 3 (PCA channel 2)
+    'z': (2, DUTY_0),    # 0%
+    'x': (2, DUTY_33),   # 33%
+    'c': (2, DUTY_66),   # 66%
+    'v': (2, DUTY_100)   # 100%
 }
 
 ##### HOTKEYS #####
@@ -275,10 +299,11 @@ def on_press(key):
 
             # Fan control
             if c in duty_lookup:
-                duty = duty_lookup[c]
-                fan.duty_cycle = duty
+                fan_index, duty = duty_lookup[c]
+                fans[fan_index].duty_cycle = duty
+                fan_name = f"Fan {fan_index+1}"
                 percent = int((duty / 0xFFFF) * 100)
-                print(f"[KEY '{c.upper()}'] → Fan speed set to {percent}%")
+                print(f"[KEY '{c.upper()}'] → {fan_name} speed set to {percent}%")
 
             # Fullscreen camera mode
             elif c in ['1', '2', '3'] and current_mode != 'multi_select':
@@ -305,7 +330,9 @@ def on_press(key):
 def on_release(key):
     if key == keyboard.Key.esc:
         print("👋 Exiting...")
-        fan.duty_cycle = 0x0000
+        # Turn off all fans
+        for fan in fans.values():
+            fan.duty_cycle = 0x0000
         pca.deinit()
         global stop_thread
         stop_thread = True
