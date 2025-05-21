@@ -317,6 +317,7 @@ class OverlayMenu:
         # Show the main menu again when closing this overlay
         if hasattr(self.root, '_uioverlay'):
             self.root._uioverlay.show_main_menu()
+            self.root._uioverlay.maintain_focus()  # Add this line
             
         if self.overlay.winfo_exists():
             self.overlay.destroy()
@@ -527,6 +528,27 @@ class UIOverlay(threading.Thread):
         """Show the main menu."""
         # Restore original transparency
         self.root.attributes('-alpha', 0.7)
+
+    def maintain_focus(self):
+        """Ensure application stays in focus and taskbar doesn't appear."""
+        # Force the root window to stay on top
+        self.root.attributes('-topmost', False)
+        self.root.attributes('-topmost', True)
+        self.root.focus_force()
+        
+        # Using after to ensure this happens after UI events settle
+        self.root.after(100, lambda: self.root.focus_force())
+        
+        # For cv2 windows, we need a different approach
+        # Import a function that can activate cv2 windows by name
+        # This is OS dependent, but we can handle it for Windows
+        if hasattr(cv2, 'setWindowProperty'):
+            try:
+                # Try to focus the camera window (assuming window name is "Camera")
+                cv2.setWindowProperty("Camera", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                cv2.setWindowProperty("Camera", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+            except:
+                pass  # Ignore errors if window doesn't exist
 
 if __name__=='__main__':
     # Start your cv2 camera+fan process in main thread
