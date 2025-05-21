@@ -78,14 +78,13 @@ class OverlayMenu:
                     btn = tk.Button(
                         btn_container, 
                         text=text, 
-                        width=16,  # 2x wider (was 8)
-                        height=4,  # 2x taller (was 2)
-                        font=("Arial", 13),  # Larger font size
-                        # Darker button style
+                        width=16,  # 2x wider
+                        height=4,  # 2x taller
+                        font=("Arial", 13),
+                        # Darker button style, no hover effects
                         bg="#444444",
                         fg="white",
-                        activebackground="#555555",
-                        activeforeground="white",
+                        # Removed activebackground and activeforeground
                         command=lambda c=cmd, t=text: self._handle_selection(c, t)
                     )
                     btn.grid(row=row, column=col, padx=8, pady=8)  # More padding
@@ -103,11 +102,10 @@ class OverlayMenu:
                     width=12, 
                     height=3,
                     font=("Arial", 12),
-                    # Darker button style
+                    # Darker button style, no hover effects
                     bg="#444444",
                     fg="white",
-                    activebackground="#555555",
-                    activeforeground="white",
+                    # Removed activebackground and activeforeground
                     command=lambda c=cmd, t=text: self._handle_selection(c, t)
                 )
                 btn.grid(row=row, column=col, padx=10, pady=10)
@@ -122,8 +120,7 @@ class OverlayMenu:
             font=("Arial", 12),
             bg="#555555",
             fg="white",
-            activebackground="#666666",
-            activeforeground="white",
+            # Removed activebackground and activeforeground
             command=self.destroy
         )
         close_btn.pack(pady=20)
@@ -356,10 +353,7 @@ class UIOverlay(threading.Thread):
             for col in range(1, 5):  # 4 speeds per fan
                 btn_id = f"{row}-{col}"
                 if btn_id in menu.buttons:
-                    menu.buttons[btn_id].config(
-                        bg=default_color,
-                        activebackground="#555555"  # Default hover color
-                    )
+                    menu.buttons[btn_id].config(bg=default_color)  # No active background
         
         # Now highlight the active buttons
         speeds = ['Off', 'Low', 'Medium', 'High']
@@ -371,12 +365,7 @@ class UIOverlay(threading.Thread):
                 col = speeds.index(speed) + 1  # +1 because col 0 is the fan name
                 btn_id = f"{row}-{col}"
                 if btn_id in menu.buttons:
-                    # Set both background AND activebackground to highlight color
-                    # This ensures hover doesn't change the color
-                    menu.buttons[btn_id].config(
-                        bg=highlight_color,
-                        activebackground=highlight_color  # Same as highlight color
-                    )
+                    menu.buttons[btn_id].config(bg=highlight_color)  # No active background
 
     def all_fans_speed(self, speed):
         """Set all fans to the specified speed."""
