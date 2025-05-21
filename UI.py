@@ -340,12 +340,18 @@ class UIOverlay(threading.Thread):
     
     def _highlight_active_fan_buttons(self, menu):
         """Highlight buttons based on current fan states."""
+        highlight_color = "#00A0FF"  # Blue highlight color
+        default_color = "#444444"    # Dark gray default color
+        
         # First, reset all fan buttons to default color
         for row in range(3):  # 3 fans (not including ALL row)
             for col in range(1, 5):  # 4 speeds per fan
                 btn_id = f"{row}-{col}"
                 if btn_id in menu.buttons:
-                    menu.buttons[btn_id].config(bg="#444444")  # Reset to default
+                    menu.buttons[btn_id].config(
+                        bg=default_color,
+                        activebackground="#555555"  # Default hover color
+                    )
         
         # Now highlight the active buttons
         speeds = ['Off', 'Low', 'Medium', 'High']
@@ -357,7 +363,12 @@ class UIOverlay(threading.Thread):
                 col = speeds.index(speed) + 1  # +1 because col 0 is the fan name
                 btn_id = f"{row}-{col}"
                 if btn_id in menu.buttons:
-                    menu.buttons[btn_id].config(bg="#00A0FF")  # Highlight color
+                    # Set both background AND activebackground to highlight color
+                    # This ensures hover doesn't change the color
+                    menu.buttons[btn_id].config(
+                        bg=highlight_color,
+                        activebackground=highlight_color  # Same as highlight color
+                    )
 
     def all_fans_speed(self, speed):
         """Set all fans to the specified speed."""
