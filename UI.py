@@ -221,6 +221,7 @@ class OverlayMenu:
             self.multi_mode = True
             self.selected_cameras = []
             self.buttons['Multi'].config(bg="#00A0FF")  # Highlight Multi button
+            self.overlay.update_idletasks()  # Force immediate UI update
             
             # Update instructions
             self.title_label.config(text="Select two cameras for multiview")
@@ -241,11 +242,13 @@ class OverlayMenu:
                 # Deselect camera
                 self.selected_cameras.remove(cam_num)
                 self.buttons[text].config(bg="#444444")  # Reset to dark button color
+                self.overlay.update_idletasks()  # Force immediate UI update
             else:
                 # Select camera if we have room
                 if len(self.selected_cameras) < 2:
                     self.selected_cameras.append(cam_num)
                     self.buttons[text].config(bg="#00A0FF")
+                    self.overlay.update_idletasks()  # Force immediate UI update
             
             # If we selected two cameras, send the keystrokes and close
             if len(self.selected_cameras) == 2:
