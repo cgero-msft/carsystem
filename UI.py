@@ -115,7 +115,7 @@ class OverlayMenu:
         
         # Add close button with darker style
         close_btn = tk.Button(
-            button_frame, 
+            self.overlay,  # Parent is the fullscreen overlay
             text="Cancel", 
             width=12, 
             height=2,
@@ -126,7 +126,8 @@ class OverlayMenu:
             activeforeground="white",    # Same as fg
             command=self.destroy
         )
-        close_btn.pack(pady=20)
+        # Position at bottom left corner with some padding
+        close_btn.place(x=20, rely=0.95, anchor='sw')
         
         # Auto-destroy timer
         self.timer_id = self.overlay.after(5000, self.destroy)
