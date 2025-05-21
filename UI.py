@@ -46,27 +46,65 @@ class OverlayMenu:
         btn_container = tk.Frame(button_frame, bg='#222222')
         btn_container.pack()
         
-        # Create buttons
-        columns = min(4, len(buttons))
-        for idx, (text, cmd) in enumerate(buttons):
-            row = idx // columns
-            col = idx % columns
-            
-            btn = tk.Button(
-                btn_container, 
-                text=text, 
-                width=12, 
-                height=3,
-                font=("Arial", 12),
-                # Darker button style
-                bg="#444444",
-                fg="white",
-                activebackground="#555555",
-                activeforeground="white",
-                command=lambda c=cmd, t=text: self._handle_selection(c, t)
-            )
-            btn.grid(row=row, column=col, padx=10, pady=10)
-            self.buttons[text] = btn
+        # Check if this is a fan control menu (has 20 buttons in 4 rows of 5)
+        is_fan_grid = len(buttons) == 20
+        
+        if is_fan_grid:
+            # Fan control grid layout (4 rows × 5 columns)
+            for idx, (text, cmd) in enumerate(buttons):
+                row = idx // 5
+                col = idx % 5
+                
+                if col == 0:  # Fan names on the left
+                    # Fan name label (left column)
+                    lbl = tk.Label(
+                        btn_container,
+                        text=text,
+                        font=("Arial", 12, "bold"),
+                        width=10,
+                        bg="#333333",
+                        fg="white"
+                    )
+                    lbl.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+                else:
+                    # Speed button
+                    btn = tk.Button(
+                        btn_container, 
+                        text=text, 
+                        width=8, 
+                        height=2,
+                        font=("Arial", 11),
+                        # Darker button style
+                        bg="#444444",
+                        fg="white",
+                        activebackground="#555555",
+                        activeforeground="white",
+                        command=lambda c=cmd, t=text: self._handle_selection(c, t)
+                    )
+                    btn.grid(row=row, column=col, padx=5, pady=5)
+                    self.buttons[f"{row}-{col}"] = btn
+        else:
+            # Regular grid layout
+            columns = min(4, len(buttons))
+            for idx, (text, cmd) in enumerate(buttons):
+                row = idx // columns
+                col = idx % columns
+                
+                btn = tk.Button(
+                    btn_container, 
+                    text=text, 
+                    width=12, 
+                    height=3,
+                    font=("Arial", 12),
+                    # Darker button style
+                    bg="#444444",
+                    fg="white",
+                    activebackground="#555555",
+                    activeforeground="white",
+                    command=lambda c=cmd, t=text: self._handle_selection(c, t)
+                )
+                btn.grid(row=row, column=col, padx=10, pady=10)
+                self.buttons[text] = btn
         
         # Add close button with darker style
         close_btn = tk.Button(
@@ -212,35 +250,58 @@ class UIOverlay(threading.Thread):
 
     def show_fan_menu(self):
         print("Fan button clicked")  # Debug print
-        OverlayMenu(self.root, [
-            ('Fan 1', lambda: self.show_fan1_menu()),
-            ('Fan 2', lambda: self.show_fan2_menu()),
-            ('Fan 3', lambda: self.show_fan3_menu())
-        ], title="Select Fan")
+        
+        # Create a grid of buttons with fan names on left and speeds across
+        buttons = []
+        
+        # Add Rowley (Fan 1) row
+        buttons.append(('Rowley', lambda: None))  # Fan name (no action)
+        buttons.append(('Off', lambda: self.send_fan('a')))
+        buttons.append(('Low', lambda: self.send_fan('s')))
+        buttons.append(('Medium', lambda: self.send_fan('d')))
+        buttons.append(('High', lambda: self.send_fan('f')))
+        
+        # Add Glow (Fan 2) row
+        buttons.append(('Glow', lambda: None))
+        buttons.append(('Off', lambda: self.send_fan('g')))
+        buttons.append(('Low', lambda: self.send_fan('h')))
+        buttons.append(('Medium', lambda: self.send_fan('j')))
+        buttons.append(('High', lambda: self.send_fan('k')))
+        
+        # Add Brevity (Fan 3) row
+        buttons.append(('Brevity', lambda: None))
+        buttons.append(('Off', lambda: self.send_fan('z')))
+        buttons.append(('Low', lambda: self.send_fan('x')))
+        buttons.append(('Medium', lambda: self.send_fan('c')))
+        buttons.append(('High', lambda: self.send_fan('v')))
+        
+        # Add ALL row
+        buttons.append(('ALL', lambda: None))
+        buttons.append(('Off', lambda: self.all_fans_speed('off')))
+        buttons.append(('Low', lambda: self.all_fans_speed('low')))
+        buttons.append(('Medium', lambda: self.all_fans_speed('medium')))
+        buttons.append(('High', lambda: self.all_fans_speed('high')))
+        
+        OverlayMenu(self.root, buttons, title="Fan Control")
 
-    def show_fan1_menu(self):
-        OverlayMenu(self.root, [
-            ('0%', lambda: self.send_fan('a')),
-            ('33%', lambda: self.send_fan('s')),
-            ('66%', lambda: self.send_fan('d')),
-            ('100%', lambda: self.send_fan('f'))
-        ], title="Fan 1 Speed")
-        
-    def show_fan2_menu(self):
-        OverlayMenu(self.root, [
-            ('0%', lambda: self.send_fan('g')),
-            ('33%', lambda: self.send_fan('h')),
-            ('66%', lambda: self.send_fan('j')),
-            ('100%', lambda: self.send_fan('k'))
-        ], title="Fan 2 Speed")
-        
-    def show_fan3_menu(self):
-        OverlayMenu(self.root, [
-            ('0%', lambda: self.send_fan('z')),
-            ('33%', lambda: self.send_fan('x')),
-            ('66%', lambda: self.send_fan('c')),
-            ('100%', lambda: self.send_fan('v'))
-        ], title="Fan 3 Speed")
+    def all_fans_speed(self, speed):
+        """Set all fans to the specified speed."""
+        if speed == 'off':
+            self.send_fan('a')  # Fan 1 off
+            self.send_fan('g')  # Fan 2 off
+            self.send_fan('z')  # Fan 3 off
+        elif speed == 'low':
+            self.send_fan('s')  # Fan 1 low
+            self.send_fan('h')  # Fan 2 low
+            self.send_fan('x')  # Fan 3 low
+        elif speed == 'medium':
+            self.send_fan('d')  # Fan 1 medium
+            self.send_fan('j')  # Fan 2 medium
+            self.send_fan('c')  # Fan 3 medium
+        elif speed == 'high':
+            self.send_fan('f')  # Fan 1 high
+            self.send_fan('k')  # Fan 2 high
+            self.send_fan('v')  # Fan 3 high
 
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print
