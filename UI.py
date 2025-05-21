@@ -21,6 +21,9 @@ class OverlayMenu:
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         
+        # Hide the cursor in the overlay window
+        self.overlay.config(cursor="none")  # Hide the mouse cursor
+        
         # Hide the main menu when opening this overlay
         if hasattr(root, '_uioverlay'):
             root._uioverlay.hide_main_menu()
@@ -367,6 +370,9 @@ class UIOverlay(threading.Thread):
         self.root._uioverlay = self  
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
+        
+        # Hide the cursor in the main window
+        self.root.config(cursor="none")  # Hide the mouse cursor
         
         # Panel dimensions
         panel_width = 300
