@@ -37,7 +37,17 @@ class OverlayMenu:
         
         # Create frame for buttons with dark background
         button_frame = tk.Frame(self.overlay, bg='#222222')
-        button_frame.place(relx=0.5, rely=0.5, anchor='center')
+        
+        # Check if this is a fan control menu with grid layout
+        is_fan_grid = len(buttons) == 20
+        
+        # Position the button frame higher for fan control grid
+        if is_fan_grid:
+            # For Fan Control, place frame higher (40% down instead of 50%)
+            button_frame.place(relx=0.5, rely=0.4, anchor='center')
+        else:
+            # Standard position for other menus
+            button_frame.place(relx=0.5, rely=0.5, anchor='center')
         
         # Create title/instructions label with light text on dark background
         self.title_label = tk.Label(
