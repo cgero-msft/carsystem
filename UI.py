@@ -160,8 +160,53 @@ class OverlayMenu:
         # Position at bottom left corner with some padding
         close_btn.place(x=20, rely=0.95, anchor='sw')
         
+        # Add lock button for fan control menu only
+        self.locked = False  # Track lock state
+        if self.is_fan_menu:
+            self.lock_btn = tk.Button(
+                self.overlay,  # Parent is the fullscreen overlay
+                text="Lock", 
+                width=12, 
+                height=2,
+                font=("Arial", 12),
+                bg="#555555",
+                fg="white",
+                activebackground="#555555",  # Same as bg
+                activeforeground="white",    # Same as fg
+                command=self.toggle_lock
+            )
+            # Position at bottom right corner with some padding
+            self.lock_btn.place(relx=0.98, rely=0.95, anchor='se')
+        
         # Auto-destroy timer
         self.timer_id = self.overlay.after(5000, self.destroy)
+
+    def toggle_lock(self):
+        """Toggle the lock state of the menu."""
+        self.locked = not self.locked
+        
+        if self.locked:
+            # Lock engaged - cancel the auto-destroy timer
+            if hasattr(self, 'timer_id') and self.timer_id:
+                self.overlay.after_cancel(self.timer_id)
+                self.timer_id = None
+            
+            # Change button color to indicate locked state
+            self.lock_btn.config(
+                bg="#00A0FF",               # Bright blue when locked
+                activebackground="#00A0FF", # Same for hover
+                text="Locked"               # Change text to "Locked"
+            )
+        else:
+            # Lock disengaged - restore the auto-destroy timer
+            self.timer_id = self.overlay.after(5000, self.destroy)
+            
+            # Restore original button appearance
+            self.lock_btn.config(
+                bg="#555555",               # Original gray
+                activebackground="#555555", # Same for hover
+                text="Lock"                 # Restore original text
+            )
 
     def _handle_selection(self, cmd, text):
         # Camera name to number mapping
@@ -218,9 +263,13 @@ class OverlayMenu:
             # Execute the command
             cmd()
             
-            # Reset the auto-destroy timer to keep menu open
-            self.overlay.after_cancel(self.timer_id)
-            self.timer_id = self.overlay.after(5000, self.destroy)
+            # Reset the auto-destroy timer only if not locked
+            if hasattr(self, 'timer_id') and self.timer_id:
+                self.overlay.after_cancel(self.timer_id)
+            
+            # Only set a new timer if not locked
+            if not self.locked:
+                self.timer_id = self.overlay.after(5000, self.destroy)
             
             # Update button highlighting - get the parent UIOverlay
             if hasattr(self.root, '_uioverlay'):
