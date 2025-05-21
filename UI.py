@@ -32,8 +32,9 @@ class OverlayMenu:
         self.selected_cameras = []
         self.buttons = {}
         
-        # Add a flag to identify this as a fan control menu
+        # Add flags to identify menu type
         self.is_fan_menu = title == "Fan Control"
+        self.is_camera_menu = title == "Select Camera"  # New flag for camera menu
         
         # Create frame for buttons with dark background
         button_frame = tk.Frame(self.overlay, bg='#222222')
@@ -107,21 +108,41 @@ class OverlayMenu:
                 row = idx // columns
                 col = idx % columns
                 
-                btn = tk.Button(
-                    btn_container, 
-                    text=text, 
-                    width=12, 
-                    height=3,
-                    font=("Arial", 12),
-                    # Match hover colors to regular colors
-                    bg="#444444",
-                    fg="white",
-                    activebackground="#444444",  # Same as bg
-                    activeforeground="white",    # Same as fg
-                    command=lambda c=cmd, t=text: self._handle_selection(c, t)
-                )
-                btn.grid(row=row, column=col, padx=10, pady=10)
-                self.buttons[text] = btn
+                # Check if this is the camera menu to make buttons larger
+                if self.is_camera_menu:
+                    # Camera buttons - make 2x bigger
+                    btn = tk.Button(
+                        btn_container, 
+                        text=text, 
+                        width=24,  # 2x wider
+                        height=6,  # 2x taller
+                        font=("Arial", 16, "bold"),  # Larger font
+                        # Match hover colors to regular colors
+                        bg="#444444",
+                        fg="white",
+                        activebackground="#444444",  # Same as bg
+                        activeforeground="white",    # Same as fg
+                        command=lambda c=cmd, t=text: self._handle_selection(c, t)
+                    )
+                    btn.grid(row=row, column=col, padx=15, pady=15)  # More padding
+                    self.buttons[text] = btn
+                else:
+                    # Regular sized button (unchanged)
+                    btn = tk.Button(
+                        btn_container, 
+                        text=text, 
+                        width=12, 
+                        height=3,
+                        font=("Arial", 12),
+                        # Match hover colors to regular colors
+                        bg="#444444",
+                        fg="white",
+                        activebackground="#444444",  # Same as bg
+                        activeforeground="white",    # Same as fg
+                        command=lambda c=cmd, t=text: self._handle_selection(c, t)
+                    )
+                    btn.grid(row=row, column=col, padx=10, pady=10)
+                    self.buttons[text] = btn
         
         # Add close button with darker style
         close_btn = tk.Button(
