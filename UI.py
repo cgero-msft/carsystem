@@ -21,10 +21,6 @@ class OverlayMenu:
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         
-        # Hide the main menu when opening an overlay menu
-        if hasattr(root, '_uioverlay'):
-            root._uioverlay.hide_main_menu()
-        
         # Dark background color
         self.overlay.configure(bg='#222222')
         
@@ -113,21 +109,13 @@ class OverlayMenu:
                 btn.grid(row=row, column=col, padx=10, pady=10)
                 self.buttons[text] = btn
         
-        # Instead of adding close button to button_frame, add it directly to overlay
-        # at the bottom center of screen
-        screen_width = self.overlay.winfo_screenwidth()
-        screen_height = self.overlay.winfo_screenheight()
-        
-        # Create a frame for the cancel button at bottom center
-        cancel_frame = tk.Frame(self.overlay, bg='#222222')
-        cancel_frame.place(relx=0.5, rely=0.9, anchor='center')  # 90% down the screen
-        
+        # Add close button with darker style
         close_btn = tk.Button(
-            cancel_frame, 
+            button_frame, 
             text="Cancel", 
-            width=16,  # Make it wider
-            height=3,  # Make it taller
-            font=("Arial", 14, "bold"),  # Larger font
+            width=12, 
+            height=2,
+            font=("Arial", 12),
             bg="#555555",
             fg="white",
             activebackground="#666666",
@@ -217,10 +205,6 @@ class OverlayMenu:
             self.root._uioverlay.send_camera(number)
 
     def destroy(self):
-        # Show main menu again when closing this menu
-        if hasattr(self.root, '_uioverlay'):
-            self.root._uioverlay.show_main_menu()
-            
         if self.overlay.winfo_exists():
             self.overlay.destroy()
 
@@ -287,8 +271,8 @@ class UIOverlay(threading.Thread):
         # Equal width buttons
         button_width = 10
         
-        # Store references to buttons so we can hide/show them
-        self.camera_btn = tk.Button(
+        # SIMPLIFIED: Direct command binding without the wrapper
+        camera_btn = tk.Button(
             self.root, 
             text="Camera",
             bg="#0078D7",
@@ -296,11 +280,12 @@ class UIOverlay(threading.Thread):
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        self.camera_btn.config(command=self.show_camera_menu)
-        self.camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Bind click event directly
+        camera_btn.config(command=self.show_camera_menu)
+        camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Fan button (same direct binding)
-        self.fan_btn = tk.Button(
+        fan_btn = tk.Button(
             self.root, 
             text="Fan",
             bg="#0078D7", 
@@ -308,8 +293,9 @@ class UIOverlay(threading.Thread):
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        self.fan_btn.config(command=self.show_fan_menu)
-        self.fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Bind click event directly
+        fan_btn.config(command=self.show_fan_menu)
+        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
@@ -416,19 +402,6 @@ class UIOverlay(threading.Thread):
             ('Brevity', lambda: self.send_camera('3')),
             ('Multi', lambda: self.send_camera('0'))
         ], title="Select Camera")
-    
-    def hide_main_menu(self):
-        """Hide the main menu buttons."""
-        if hasattr(self, 'camera_btn') and hasattr(self, 'fan_btn'):
-            self.camera_btn.pack_forget()
-            self.fan_btn.pack_forget()
-    
-    def show_main_menu(self):
-        """Restore the main menu buttons."""
-        if hasattr(self, 'camera_btn') and hasattr(self, 'fan_btn'):
-            # Re-add the buttons to the panel
-            self.camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-            self.fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
 
 if __name__=='__main__':
     # Start your cv2 camera+fan process in main thread
