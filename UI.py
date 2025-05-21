@@ -44,8 +44,8 @@ class OverlayMenu:
         
         # Position the button frame higher for fan control grid
         if is_fan_grid:
-            # For Fan Control, place frame higher (45% down instead of 50%)
-            button_frame.place(relx=0.5, rely=0.45, anchor='center')
+            # For Fan Control, place frame higher (42% down instead of 50%)
+            button_frame.place(relx=0.5, rely=0.42, anchor='center')
         else:
             # Standard position for other menus
             button_frame.place(relx=0.5, rely=0.5, anchor='center')
@@ -110,13 +110,13 @@ class OverlayMenu:
                 
                 # Check if this is the camera menu to make buttons larger
                 if self.is_camera_menu:
-                    # Camera buttons - make 2x bigger
+                    # Camera buttons - make 1.5x bigger instead of 2x
                     btn = tk.Button(
                         btn_container, 
                         text=text, 
-                        width=24,  # 2x wider
-                        height=6,  # 2x taller
-                        font=("Arial", 16, "bold"),  # Larger font
+                        width=18,  # 1.5x wider (was 24)
+                        height=4,  # Reduced from 6 to 4
+                        font=("Arial", 14, "bold"),  # Slightly smaller font
                         # Match hover colors to regular colors
                         bg="#444444",
                         fg="white",
@@ -124,7 +124,7 @@ class OverlayMenu:
                         activeforeground="white",    # Same as fg
                         command=lambda c=cmd, t=text: self._handle_selection(c, t)
                     )
-                    btn.grid(row=row, column=col, padx=15, pady=15)  # More padding
+                    btn.grid(row=row, column=col, padx=12, pady=12)  # Slightly less padding
                     self.buttons[text] = btn
                 else:
                     # Regular sized button (unchanged)
