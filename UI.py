@@ -21,6 +21,10 @@ class OverlayMenu:
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
         
+        # Hide the main menu when opening this overlay
+        if hasattr(root, '_uioverlay'):
+            root._uioverlay.hide_main_menu()
+            
         # Dark background color
         self.overlay.configure(bg='#222222')
         
@@ -205,6 +209,10 @@ class OverlayMenu:
             self.root._uioverlay.send_camera(number)
 
     def destroy(self):
+        # Show the main menu again when closing this overlay
+        if hasattr(self.root, '_uioverlay'):
+            self.root._uioverlay.show_main_menu()
+            
         if self.overlay.winfo_exists():
             self.overlay.destroy()
 
@@ -402,6 +410,16 @@ class UIOverlay(threading.Thread):
             ('Brevity', lambda: self.send_camera('3')),
             ('Multi', lambda: self.send_camera('0'))
         ], title="Select Camera")
+    
+    def hide_main_menu(self):
+        """Hide the main menu completely."""
+        # Instead of just hiding buttons, make the whole window invisible
+        self.root.attributes('-alpha', 0.0)  # Completely transparent
+    
+    def show_main_menu(self):
+        """Show the main menu."""
+        # Restore original transparency
+        self.root.attributes('-alpha', 0.7)
 
 if __name__=='__main__':
     # Start your cv2 camera+fan process in main thread
