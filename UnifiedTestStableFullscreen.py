@@ -263,28 +263,27 @@ def show_single(cam_key):
 
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
-
-    # Before switching, capture the screen with a fullscreen black window to prevent taskbar flash
+    
+    # Show black frame in current window to prevent flashing
     try:
-        # Create a temporary fullscreen black window
-        root = tk.Tk()
-        root.attributes('-fullscreen', True)
-        root.attributes('-topmost', True)
-        root.configure(bg='black')
-        root.update()
+        # Create a black frame
+        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
         
-        # Mark old thread for stopping
-        stop_thread = True
-        if display_thread and display_thread.is_alive():
-            # Wait for thread to finish
-            display_thread.join(timeout=1.0)  # Don't wait longer than 1 second
-            
-        # Now destroy the temporary window
-        root.destroy()
-    except Exception as e:
-        print(f"Error during mode switch: {e}")
-
-    # Continue with the rest of the switching code
+        # Display it in the existing window if available
+        window_name = 'Camera View'
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.imshow(window_name, black_bg)
+        cv2.waitKey(1)
+    except:
+        pass
+    
+    # Mark old thread for stopping
+    stop_thread = True
+    if display_thread and display_thread.is_alive():
+        # Wait for thread to finish
+        display_thread.join(timeout=0.5)  # Shorter timeout for quicker switching
+    
     current_mode = mode
 
     if mode == 'multi':
@@ -298,119 +297,47 @@ def switch_mode(mode, cam_keys=None):
     
     # Ensure cursor stays hidden after the switch
     hide_cursor_system_wide()
-    
-##### FAN SECTION #####
-i2c = busio.I2C(SCL, SDA)
-pca = PCA9685(i2c)
-pca.frequency = 250
 
-# Create three fan channel objects
-fans = {
-    0: pca.channels[0],  # Fan 1
-    1: pca.channels[1],  # Fan 2
-    2: pca.channels[2]   # Fan 3
-}
-
-# Hex values for different duty cycles
-DUTY_0   = 0x0000  # 0%
-DUTY_33  = 0x5555  # 33%
-DUTY_66  = 0xAAAA  # 66%
-DUTY_100 = 0xFFFF  # 100%
-
-# Map keys to (fan channel, duty cycle)
-duty_lookup = {
-    # Fan 1 (PCA channel 0)
-    'a': (0, DUTY_0),    # 0%
-    's': (0, DUTY_33),   # 33%
-    'd': (0, DUTY_66),   # 66%
-    'f': (0, DUTY_100),  # 100%
-    
-    # Fan 2 (PCA channel 1)
-    'g': (1, DUTY_0),    # 0%
-    'h': (1, DUTY_33),   # 33%
-    'j': (1, DUTY_66),   # 66%
-    'k': (1, DUTY_100),  # 100%
-    
-    # Fan 3 (PCA channel 2)
-    'z': (2, DUTY_0),    # 0%
-    'x': (2, DUTY_33),   # 33%
-    'c': (2, DUTY_66),   # 66%
-    'v': (2, DUTY_100)   # 100%
-}
-
-##### HOTKEYS #####
-def on_press(key):
-    global multiview_selection, current_mode
-
+# Add this function to fix the window properties in case of errors
+def fix_window_properties(window_name='Camera View'):
+    """Fix window properties to ensure proper fullscreen and no cursor"""
     try:
-        if hasattr(key, 'char'):
-            c = key.char.lower()
+        # Force the window to be on top and fullscreen
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        
+        # Try wmctrl command but ignore errors
+        try:
+            subprocess.call(['wmctrl', '-r', window_name, '-b', 'add,fullscreen,above'], 
+                          stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        except:
+            pass
+    except:
+        pass
 
-            # Fan control
-            if c in duty_lookup:
-                fan_index, duty = duty_lookup[c]
-                fans[fan_index].duty_cycle = duty
-                fan_name = f"Fan {fan_index+1}"
-                percent = int((duty / 0xFFFF) * 100)
-                print(f"[KEY '{c.upper()}'] → {fan_name} speed set to {percent}%")
-
-            # Fullscreen camera mode
-            elif c in ['1', '2', '3'] and current_mode != 'multi_select':
-                switch_mode(c)
-
-            # Enter multi-select mode
-            elif c == '0':
-                print("📺 Entering multi-select mode: Press 2 camera numbers (1-3)")
-                multiview_selection = []
-                current_mode = 'multi_select'
-
-            # Select cameras for multiview
-            elif current_mode == 'multi_select' and c in ['1', '2', '3']:
-                if c not in multiview_selection:
-                    multiview_selection.append(c)
-                    print(f"✅ Selected Camera {c}")
-                if len(multiview_selection) == 2:
-                    switch_mode('multi', multiview_selection)
-                    multiview_selection = []
-
-    except Exception as e:
-        print(f"❗ Keyboard error: {e}")
-
-def on_release(key):
-    if key == keyboard.Key.esc:
-        print("👋 Exiting...")
-        # Turn off all fans
-        for fan in fans.values():
-            fan.duty_cycle = 0x0000
-        pca.deinit()
-        global stop_thread
-        stop_thread = True
-        if display_thread and display_thread.is_alive():
-            display_thread.join()
-        return False  # This stops the keyboard listener
-
-##### MAIN ENTRY POINT #####
+# Update the main function to install xinput
 def main():
     print("🎥 Webcam viewer ready")
     print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
 
-    # Make sure to install wmctrl
+    # Install necessary utilities
     try:
-        subprocess.call(['which', 'wmctrl'], stdout=subprocess.DEVNULL)
+        # Check for xinput - critical for touchscreen cursor handling
+        if subprocess.call(['which', 'xinput'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+            print("Installing xinput for better touch handling...")
+            subprocess.call(['sudo', 'apt-get', 'install', '-y', 'xinput'])
+            
+        # Check for wmctrl
+        if subprocess.call(['which', 'wmctrl'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+            print("Installing wmctrl for better window management...")
+            subprocess.call(['sudo', 'apt-get', 'install', '-y', 'wmctrl'])
     except:
-        print("Installing wmctrl for better window management...")
-        subprocess.call(['sudo', 'apt-get', 'install', '-y', 'wmctrl'])
+        print("Could not install all utilities, but continuing...")
     
     # Hide cursor and ensure no taskbar appears
     hide_cursor_system_wide()
     
     # Auto-start in multiview mode with Cameras 1 and 2
     switch_mode('multi', ['1', '2'])
-    
-    # Set up OpenCV window - keep this part
-    cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
-    cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    cv2.setWindowProperty('Camera View', cv2.WND_PROP_TOPMOST, 1)  # Always on top
     
     # Create a keyboard controller for the UI to send keypresses
     kb_controller = keyboard.Controller()
@@ -419,6 +346,9 @@ def main():
     def send_camera(key):
         kb_controller.press(key)
         kb_controller.release(key)
+        # Call window fixing function after camera switch
+        time.sleep(0.2)  # Wait for switch to complete
+        fix_window_properties()
     
     def send_fan(key):
         kb_controller.press(key)
@@ -428,9 +358,14 @@ def main():
     ui = UIOverlay(send_camera=send_camera, send_fan=send_fan)
     ui.start()
     
+    # Schedule periodic window property fixes
+    def schedule_fix():
+        fix_window_properties()
+        threading.Timer(5.0, schedule_fix).start()  # Check every 5 seconds
+    
+    # Start the periodic fixer
+    schedule_fix()
+    
     # Continue with keyboard listener
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
-
-if __name__ == "__main__":
-    main()

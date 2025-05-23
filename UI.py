@@ -15,18 +15,52 @@ def hide_cursor_system_wide():
         # Kill any existing unclutter processes first
         subprocess.call(['killall', 'unclutter'], stderr=subprocess.DEVNULL)
         
-        # Launch unclutter with more aggressive settings
-        subprocess.Popen(['unclutter', '-idle', '0', '-root', '-visible'])
+        # Try multiple unclutter approaches
+        # First with touchscreen-specific settings
+        subprocess.Popen(['unclutter', '-idle', '0', '-root', '-grab', '-touch'])
         
-        # Additional methods
-        os.system("DISPLAY=:0 xsetroot -cursor_name blank")
-        os.system("DISPLAY=:0 xset -dpms")  # Disable DPMS (Energy Star) features
-        os.system("DISPLAY=:0 xset s off")   # Disable screen saver
-        os.system("DISPLAY=:0 xset s noblank") # Don't blank the video device
+        # Use xinput to disable the cursor completely (more aggressive)
+        try:
+            # Get the ID of the touchscreen device if available
+            xinput_output = subprocess.check_output(['xinput', 'list'], text=True)
+            
+            # Try to identify touchscreen devices
+            for line in xinput_output.splitlines():
+                if "touch" in line.lower():
+                    # Extract ID number
+                    parts = line.split("id=")
+                    if len(parts) > 1:
+                        device_id = parts[1].split()[0]
+                        # Disable the cursor for this device
+                        subprocess.call(['xinput', 'set-prop', device_id, 'Device Enabled', '0'])
+                        subprocess.call(['xinput', 'set-prop', device_id, 'Coordinate Transformation Matrix', 
+                                       '1', '0', '0', '0', '1', '0', '0', '0', '0'])
+        except Exception as e:
+            print(f"Couldn't disable touchscreen cursor: {e}")
         
-        # Disable X11 cursor completely through configuration
-        os.system("echo -e 'Section \"ServerFlags\"\n    Option \"NoCursor\"\nEndSection' > /tmp/nocursor.conf")
-        
+        # Use X resource settings - ignore errors for unimplemented features
+        try:
+            os.system("DISPLAY=:0 xsetroot -cursor_name blank 2>/dev/null")
+            os.system("DISPLAY=:0 xset s off 2>/dev/null")   # Disable screen saver
+            os.system("DISPLAY=:0 xset s noblank 2>/dev/null") # Don't blank the video device
+        except:
+            pass
+            
+        # Use empty cursor (most effective for touchscreens)
+        try:
+            # Create an empty cursor file
+            with open('/tmp/empty_cursor.xbm', 'w') as f:
+                f.write('#define empty_cursor_width 1\n#define empty_cursor_height 1\nstatic unsigned char empty_cursor_bits[] = { 0x00 };\n')
+                
+            # Create an empty cursor mask file
+            with open('/tmp/empty_cursor_mask.xbm', 'w') as f:
+                f.write('#define empty_cursor_mask_width 1\n#define empty_cursor_mask_height 1\nstatic unsigned char empty_cursor_mask_bits[] = { 0x00 };\n')
+                
+            # Set the empty cursor using xsetroot
+            os.system("DISPLAY=:0 xsetroot -cursor /tmp/empty_cursor.xbm /tmp/empty_cursor_mask.xbm 2>/dev/null")
+        except:
+            pass
+            
         print("Applied multiple cursor hiding methods")
     except Exception as e:
         print(f"Warning: couldn't hide cursor completely: {e}")
@@ -331,17 +365,17 @@ class OverlayMenu:
     def send_camera(self, number):
         """Send camera selection keypress"""
         # This forwards to the parent UIOverlay
-        if hasattr(self.root, '_uioverlay'):
-            self.root._uioverlay.send_camera(number)
+        if hasattr(self.root, '_uoverlay'):
+            self.root._uoverlay.send_camera(number)
 
     def destroy(self):
         # Show the main menu again when closing this overlay
-        if hasattr(self.root, '_uioverlay'):
+        if hasattr(self.root, '_uoverlay'):
             # Ensure focus is maintained before showing main menu
-            self.root._uioverlay.force_focus()
-            self.root._uioverlay.show_main_menu()
+            self.root._uoverlay.force_focus()
+            self.root._uoverlay.show_main_menu()
             # Call focus maintenance again after showing the menu
-            self.root._uioverlay.maintain_focus()
+            self.root._uoverlay.maintain_focus()
             
         if self.overlay.winfo_exists():
             self.overlay.destroy()
