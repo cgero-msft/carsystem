@@ -55,54 +55,138 @@ def show_multiview(cam_keys):
     print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
     
     def display():
+        caps = []
         try:
-            caps = []
-            for k in cam_keys:
-                print(f"Opening camera {k}...")
-                cap = cv2.VideoCapture(camera_paths[k])
-                if cap.isOpened():
-                    caps.append(cap)
-                else:
-                    print(f"Failed to open camera {k}")
-                    return
-
-            # Create window
+            # First create window early to prevent hanging
             window_name = 'Camera View'
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-            cv2.moveWindow(window_name, 0, 0)
-            cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
             cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
             
-            # Black image for initialization
-            black = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-            cv2.imshow(window_name, black)
+            # Display a "Loading..." message while cameras initialize
+            loading_frame = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            cv2.putText(loading_frame, 'Loading cameras...', (SCREEN_WIDTH//4, SCREEN_HEIGHT//2), 
+                      font, 1.5, (255, 255, 255), 2)
+            cv2.imshow(window_name, loading_frame)
             cv2.waitKey(1)
+            
+            # Open cameras with timeout handling
+            for k in cam_keys:
+                try:
+                    print(f"Opening camera {k}...")
+                    # First try with default settings
+                    cap = cv2.VideoCapture(camera_paths[k])
+                    
+                    # Important: Set camera properties AFTER opening
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # Use a small buffer
+                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                    cap.set(cv2.CAP_PROP_FPS, 15)  # Lower FPS for stability
+                    
+                    # Verify opening with timeout
+                    start_time = time.time()
+                    while not cap.isOpened() and time.time() - start_time < 5:
+                        print(f"Retrying camera {k}...")
+                        cap.release()
+                        time.sleep(0.5)
+                        cap = cv2.VideoCapture(camera_paths[k])
+                    
+                    if cap.isOpened():
+                        # Test read a frame to make sure it works
+                        ret, test_frame = cap.read()
+                        if ret:
+                            caps.append(cap)
+                            print(f"Camera {k} initialized successfully")
+                        else:
+                            print(f"Camera {k} opened but could not read frame")
+                            cap.release()
+                    else:
+                        print(f"Failed to open camera {k}")
+                except Exception as e:
+                    print(f"Error opening camera {k}: {e}")
+            
+            if not caps:
+                print("No cameras could be initialized!")
+                black_frame = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+                cv2.putText(black_frame, 'ERROR: No cameras available', 
+                          (SCREEN_WIDTH//4, SCREEN_HEIGHT//2), font, 1.5, (0, 0, 255), 2)
+                cv2.imshow(window_name, black_frame)
+                cv2.waitKey(1000)
+                return
+
+            # Calculate half width
+            half_width = SCREEN_WIDTH // 2
+            
+            # Set up window to exact size
+            cv2.moveWindow(window_name, 0, 0)
+            cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
             
             print("Multiview started successfully")
             
-            # Calculate half width
-            half_width = SCREEN_WIDTH // 2
+            # Variables for FPS management and timeout detection
+            frame_count = 0
+            last_frame_time = time.time()
             
             while not stop_thread:
                 # Create background
                 background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
                 
                 # Process each camera
+                frame_updated = False
                 for i, cap in enumerate(caps):
-                    ret, frame = cap.read()
-                    if not ret:
-                        continue
+                    # Use a timeout for reading frames
+                    try:
+                        ret, frame = cap.read()
+                        if not ret:
+                            # Show error indicator on this panel
+                            x_start = i * half_width
+                            cv2.putText(background, f"Camera {cam_keys[i]} error", 
+                                     (x_start + 10, SCREEN_HEIGHT//2), font, 1, (0, 0, 255), 2)
+                            continue
                         
-                    # Resize frame to fit half screen
-                    frame_resized = cv2.resize(frame, (half_width, SCREEN_HEIGHT))
+                        # Resize frame to fit half screen
+                        frame_resized = cv2.resize(frame, (half_width, SCREEN_HEIGHT))
+                        
+                        # Place in correct half
+                        x_start = i * half_width
+                        background[:, x_start:x_start+half_width] = frame_resized
+                        frame_updated = True
+                        last_frame_time = time.time()
+                        frame_count += 1
+                    except Exception as e:
+                        print(f"Error reading from camera {i}: {e}")
+                
+                # Check for timeouts
+                if time.time() - last_frame_time > 3.0:
+                    print("Camera timeout detected - attempting recovery...")
+                    # Try to recover cameras
+                    for cap in caps:
+                        cap.release()
+                    caps = []
                     
-                    # Place in correct half
-                    x_start = i * half_width
-                    background[:, x_start:x_start+half_width] = frame_resized
+                    # Reopen cameras
+                    for k in cam_keys:
+                        try:
+                            cap = cv2.VideoCapture(camera_paths[k])
+                            if cap.isOpened():
+                                caps.append(cap)
+                        except:
+                            pass
+                    
+                    if not caps:
+                        print("Camera recovery failed")
+                    else:
+                        print("Cameras recovered")
+                    
+                    # Reset timer
+                    last_frame_time = time.time()
                 
                 # Show the combined image
-                cv2.imshow(window_name, background)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                if frame_updated:
+                    cv2.imshow(window_name, background)
+                
+                # Limit the UI refresh rate to reduce CPU load
+                key = cv2.waitKey(30) & 0xFF  # 30ms delay (~33 FPS max)
+                if key == ord('q'):
                     break
                     
             # Clean up
@@ -111,6 +195,12 @@ def show_multiview(cam_keys):
                 
         except Exception as e:
             print(f"Error in multiview: {e}")
+            # Clean up any partially initialized resources
+            for cap in caps:
+                try:
+                    cap.release()
+                except:
+                    pass
     
     return threading.Thread(target=display)
 
