@@ -9,19 +9,27 @@ from adafruit_pca9685 import PCA9685
 import os
 import subprocess
 
-# --- Your existing camera & fan code remains unchanged ---
-# (Copy your entire background code: show_single, show_multiview, switch_mode, on_press, on_release, main)
-# Ensure that `main()` launches the cv2 windows and listener.
-
-# We'll wrap the UI in a separate thread that only handles overlays.
-
-# Function to hide cursor system-wide
+# Improved cursor hiding function
 def hide_cursor_system_wide():
     try:
-        # Use unclutter to hide the mouse cursor system-wide
-        subprocess.Popen(['unclutter', '-idle', '0.1', '-root'])
-    except:
-        print("Could not hide system cursor with unclutter. Please install with: sudo apt-get install unclutter")
+        # Kill any existing unclutter processes first
+        subprocess.call(['killall', 'unclutter'], stderr=subprocess.DEVNULL)
+        
+        # Launch unclutter with more aggressive settings
+        subprocess.Popen(['unclutter', '-idle', '0', '-root', '-visible'])
+        
+        # Additional methods
+        os.system("DISPLAY=:0 xsetroot -cursor_name blank")
+        os.system("DISPLAY=:0 xset -dpms")  # Disable DPMS (Energy Star) features
+        os.system("DISPLAY=:0 xset s off")   # Disable screen saver
+        os.system("DISPLAY=:0 xset s noblank") # Don't blank the video device
+        
+        # Disable X11 cursor completely through configuration
+        os.system("echo -e 'Section \"ServerFlags\"\n    Option \"NoCursor\"\nEndSection' > /tmp/nocursor.conf")
+        
+        print("Applied multiple cursor hiding methods")
+    except Exception as e:
+        print(f"Warning: couldn't hide cursor completely: {e}")
 
 class OverlayMenu:
     def __init__(self, root, buttons, title="Select Option"):
@@ -329,8 +337,11 @@ class OverlayMenu:
     def destroy(self):
         # Show the main menu again when closing this overlay
         if hasattr(self.root, '_uioverlay'):
+            # Ensure focus is maintained before showing main menu
+            self.root._uioverlay.force_focus()
             self.root._uioverlay.show_main_menu()
-            self.root._uioverlay.maintain_focus()  # Maintain window focus
+            # Call focus maintenance again after showing the menu
+            self.root._uioverlay.maintain_focus()
             
         if self.overlay.winfo_exists():
             self.overlay.destroy()
@@ -351,15 +362,46 @@ class UIOverlay(threading.Thread):
     
     def maintain_focus(self):
         """Ensure application stays on top and focused."""
-        # Force the window to be topmost
-        self.root.lift()
-        self.root.attributes('-topmost', False)
-        self.root.attributes('-topmost', True)
-        self.root.focus_force()
-        
-        # Use after to maintain topmost status periodically
-        self.root.after(200, self.maintain_focus)
-
+        try:
+            # Force the window to be topmost
+            self.root.lift()
+            self.root.attributes('-topmost', False)
+            self.root.attributes('-topmost', True)
+            self.root.focus_force()
+            
+            # Hide cursor after any potential UI event
+            self.root.config(cursor="none")
+            
+            # Use after to maintain topmost status periodically
+            self.root.after(100, self.maintain_focus)  # More frequent checks (was 200ms)
+        except:
+            # Handle any errors silently to prevent crashes
+            pass
+    
+    def force_focus(self):
+        """More aggressive focus forcing for transitions."""
+        try:
+            # Force our window to the front
+            self.root.lift()
+            self.root.attributes('-topmost', True)
+            self.root.focus_force()
+            
+            # Make it fullscreen and back to ensure X server updates properly
+            current_geometry = self.root.geometry()
+            self.root.attributes('-fullscreen', True)
+            self.root.update()  # Force update
+            self.root.attributes('-fullscreen', False)
+            self.root.geometry(current_geometry)
+            
+            # Force cursor hidden
+            self.root.config(cursor="none")
+            hide_cursor_system_wide()  # Re-apply cursor hiding
+            
+            # Focus the window again
+            self.root.focus_force()
+        except Exception as e:
+            print(f"Error in force_focus: {e}")
+    
     def run(self):
         self.root = tk.Tk()
         # Store reference to self for callbacks
@@ -367,11 +409,20 @@ class UIOverlay(threading.Thread):
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         
-        # Hide cursor for touchscreen interface
+        # Hide cursor with multiple methods
         self.root.config(cursor="none")
-        
-        # Hide system-wide cursor
         hide_cursor_system_wide()
+        
+        # Capture and hide all mouse motion events to prevent cursor from showing
+        def hide_cursor_motion(event):
+            # Keep cursor hidden on any mouse movement
+            self.root.config(cursor="none")
+            return "break"  # Prevent normal processing
+        
+        # Bind to all mouse events
+        self.root.bind("<Motion>", hide_cursor_motion)
+        self.root.bind("<Button-1>", hide_cursor_motion)
+        self.root.bind("<ButtonRelease-1>", hide_cursor_motion)
         
         # Panel dimensions
         panel_width = 300

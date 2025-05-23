@@ -11,20 +11,34 @@ import os
 import subprocess
 from UI import UIOverlay
 
-# Function to hide cursor system-wide
+# Enhanced hide cursor function
 def hide_cursor_system_wide():
     try:
-        # Try to hide cursor using unclutter
-        subprocess.Popen(['unclutter', '-idle', '0.1', '-root'])
-    except:
-        print("Could not hide system cursor with unclutter. Please install with: sudo apt-get install unclutter")
-    
-    try:
-        # Alternative method - modify X11 settings
-        os.system("echo -e 'Section \"ServerFlags\"\n    Option \"BlankTime\" \"0\"\n    Option \"StandbyTime\" \"0\"\n    Option \"SuspendTime\" \"0\"\n    Option \"OffTime\" \"0\"\n    Option \"NoBlanking\"\nEndSection' > /tmp/nocursor.conf")
-        os.system("DISPLAY=:0 xsetroot -cursor_name blank")  # This can hide cursor in X
-    except:
-        print("Could not configure X11 to hide cursor")
+        # Kill any existing unclutter processes first
+        subprocess.call(['killall', 'unclutter'], stderr=subprocess.DEVNULL)
+        
+        # Launch unclutter with more aggressive settings
+        subprocess.Popen(['unclutter', '-idle', '0', '-root', '-visible'])
+        
+        # Disable X features that might cause visual disruption
+        os.system("DISPLAY=:0 xsetroot -cursor_name blank")
+        os.system("DISPLAY=:0 xset -dpms")  # Disable DPMS (Energy Star) features
+        os.system("DISPLAY=:0 xset s off")   # Disable screen saver
+        os.system("DISPLAY=:0 xset s noblank") # Don't blank the video device
+        
+        # Configure X11 to completely disable cursor
+        os.system("echo -e 'Section \"ServerFlags\"\n    Option \"NoCursor\"\nEndSection' > /tmp/nocursor.conf")
+        
+        # Try to set the root window to fullscreen to prevent taskbar
+        try:
+            root = tk.Tk()
+            root.withdraw()  # Hide the window
+            root.attributes('-fullscreen', True)
+            root.update()
+        except:
+            pass
+    except Exception as e:
+        print(f"Warning: couldn't hide cursor completely: {e}")
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -79,9 +93,9 @@ def show_multiview(cam_keys):
             cap.set(cv2.CAP_PROP_FPS, 30)
             caps.append(cap)
 
-        # Create window with always-on-top flags
+        # Create window with Raspberry Pi optimized settings
         window_name = 'Camera View'
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
         
         # Allow window system to initialize
         time.sleep(0.5)
@@ -90,9 +104,11 @@ def show_multiview(cam_keys):
         cv2.moveWindow(window_name, 0, 0)
         cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
         
-        # Set fullscreen and always on top
+        # Set fullscreen and ensure it stays on top
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)  # Always on top
+        
+        # Add this to prevent taskbar from appearing
+        os.system(f"DISPLAY=:0 wmctrl -r '{window_name}' -b add,fullscreen,above")
         
         # Show initial black background while loading
         black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
@@ -191,10 +207,13 @@ def show_single(cam_key):
 
     # Use the same window name as multiview for persistence
     window_name = 'Camera View'
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.moveWindow(window_name, 0, 0)
+    cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)  # Always on top
+    
+    # Add this to prevent taskbar from appearing
+    os.system(f"DISPLAY=:0 wmctrl -r '{window_name}' -b add,fullscreen,above")
     
     # Show initial black background while loading
     black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
@@ -245,19 +264,27 @@ def show_single(cam_key):
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
 
-    # Mark old thread for stopping but don't destroy window
-    stop_thread = True
-    if display_thread and display_thread.is_alive():
-        # Show a black frame before switching
-        black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-        cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
-        cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        cv2.imshow('Camera View', black_bg)
-        cv2.waitKey(1)
+    # Before switching, capture the screen with a fullscreen black window to prevent taskbar flash
+    try:
+        # Create a temporary fullscreen black window
+        root = tk.Tk()
+        root.attributes('-fullscreen', True)
+        root.attributes('-topmost', True)
+        root.configure(bg='black')
+        root.update()
         
-        # Now wait for thread to finish
-        display_thread.join()
+        # Mark old thread for stopping
+        stop_thread = True
+        if display_thread and display_thread.is_alive():
+            # Wait for thread to finish
+            display_thread.join(timeout=1.0)  # Don't wait longer than 1 second
+            
+        # Now destroy the temporary window
+        root.destroy()
+    except Exception as e:
+        print(f"Error during mode switch: {e}")
 
+    # Continue with the rest of the switching code
     current_mode = mode
 
     if mode == 'multi':
@@ -268,7 +295,10 @@ def switch_mode(mode, cam_keys=None):
         return
 
     display_thread.start()
-
+    
+    # Ensure cursor stays hidden after the switch
+    hide_cursor_system_wide()
+    
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
 pca = PCA9685(i2c)
@@ -364,7 +394,14 @@ def main():
     print("🎥 Webcam viewer ready")
     print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
 
-    # Hide cursor system-wide
+    # Make sure to install wmctrl
+    try:
+        subprocess.call(['which', 'wmctrl'], stdout=subprocess.DEVNULL)
+    except:
+        print("Installing wmctrl for better window management...")
+        subprocess.call(['sudo', 'apt-get', 'install', '-y', 'wmctrl'])
+    
+    # Hide cursor and ensure no taskbar appears
     hide_cursor_system_wide()
     
     # Auto-start in multiview mode with Cameras 1 and 2
