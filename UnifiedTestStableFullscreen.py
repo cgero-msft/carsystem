@@ -7,8 +7,24 @@ from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
 import tkinter as tk
-# Fix the import - use the UIOverlay class instead
+import os
+import subprocess
 from UI import UIOverlay
+
+# Function to hide cursor system-wide
+def hide_cursor_system_wide():
+    try:
+        # Try to hide cursor using unclutter
+        subprocess.Popen(['unclutter', '-idle', '0.1', '-root'])
+    except:
+        print("Could not hide system cursor with unclutter. Please install with: sudo apt-get install unclutter")
+    
+    try:
+        # Alternative method - modify X11 settings
+        os.system("echo -e 'Section \"ServerFlags\"\n    Option \"BlankTime\" \"0\"\n    Option \"StandbyTime\" \"0\"\n    Option \"SuspendTime\" \"0\"\n    Option \"OffTime\" \"0\"\n    Option \"NoBlanking\"\nEndSection' > /tmp/nocursor.conf")
+        os.system("DISPLAY=:0 xsetroot -cursor_name blank")  # This can hide cursor in X
+    except:
+        print("Could not configure X11 to hide cursor")
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -63,9 +79,9 @@ def show_multiview(cam_keys):
             cap.set(cv2.CAP_PROP_FPS, 30)
             caps.append(cap)
 
-        # Create window with Raspberry Pi optimized settings
+        # Create window with always-on-top flags
         window_name = 'Camera View'
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
         
         # Allow window system to initialize
         time.sleep(0.5)
@@ -74,8 +90,9 @@ def show_multiview(cam_keys):
         cv2.moveWindow(window_name, 0, 0)
         cv2.resizeWindow(window_name, SCREEN_WIDTH, SCREEN_HEIGHT)
         
-        # Set fullscreen 
+        # Set fullscreen and always on top
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)  # Always on top
         
         # Show initial black background while loading
         black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
@@ -174,8 +191,10 @@ def show_single(cam_key):
 
     # Use the same window name as multiview for persistence
     window_name = 'Camera View'
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
+    cv2.moveWindow(window_name, 0, 0)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)  # Always on top
     
     # Show initial black background while loading
     black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
@@ -345,12 +364,16 @@ def main():
     print("🎥 Webcam viewer ready")
     print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
 
+    # Hide cursor system-wide
+    hide_cursor_system_wide()
+    
     # Auto-start in multiview mode with Cameras 1 and 2
     switch_mode('multi', ['1', '2'])
     
     # Set up OpenCV window - keep this part
-    cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
     cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.setWindowProperty('Camera View', cv2.WND_PROP_TOPMOST, 1)  # Always on top
     
     # Create a keyboard controller for the UI to send keypresses
     kb_controller = keyboard.Controller()

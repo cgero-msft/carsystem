@@ -6,12 +6,22 @@ import cv2, numpy as np
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
+import os
+import subprocess
 
 # --- Your existing camera & fan code remains unchanged ---
 # (Copy your entire background code: show_single, show_multiview, switch_mode, on_press, on_release, main)
 # Ensure that `main()` launches the cv2 windows and listener.
 
 # We'll wrap the UI in a separate thread that only handles overlays.
+
+# Function to hide cursor system-wide
+def hide_cursor_system_wide():
+    try:
+        # Use unclutter to hide the mouse cursor system-wide
+        subprocess.Popen(['unclutter', '-idle', '0.1', '-root'])
+    except:
+        print("Could not hide system cursor with unclutter. Please install with: sudo apt-get install unclutter")
 
 class OverlayMenu:
     def __init__(self, root, buttons, title="Select Option"):
@@ -20,8 +30,9 @@ class OverlayMenu:
         self.overlay.attributes('-fullscreen', True)
         self.overlay.attributes('-alpha', 0.7)
         self.overlay.attributes('-topmost', True)
-        self.overlay.config(cursor="none")   # ← hide the mouse cursor on this overlay
-
+        
+        # Hide cursor in this window
+        self.overlay.config(cursor="none")
         
         # Hide the main menu when opening this overlay
         if hasattr(root, '_uioverlay'):
@@ -319,7 +330,7 @@ class OverlayMenu:
         # Show the main menu again when closing this overlay
         if hasattr(self.root, '_uioverlay'):
             self.root._uioverlay.show_main_menu()
-            self.root._uioverlay.maintain_focus()  # Add this line
+            self.root._uioverlay.maintain_focus()  # Maintain window focus
             
         if self.overlay.winfo_exists():
             self.overlay.destroy()
@@ -337,32 +348,17 @@ class UIOverlay(threading.Thread):
             'Glow': 'Off',     # Fan 2 
             'Brevity': 'Off'   # Fan 3
         }
-
-    # Original send_fan wrapper to track states
-    def _update_fan_state(self, key):
-        # Map key to fan name and speed
-        key_mapping = {
-            'a': ('Rowley', 'Off'),
-            's': ('Rowley', 'Low'),
-            'd': ('Rowley', 'Medium'),
-            'f': ('Rowley', 'High'),
-            'g': ('Glow', 'Off'),
-            'h': ('Glow', 'Low'),
-            'j': ('Glow', 'Medium'),
-            'k': ('Glow', 'High'),
-            'z': ('Brevity', 'Off'),
-            'x': ('Brevity', 'Low'),
-            'c': ('Brevity', 'Medium'),
-            'v': ('Brevity', 'High')
-        }
+    
+    def maintain_focus(self):
+        """Ensure application stays on top and focused."""
+        # Force the window to be topmost
+        self.root.lift()
+        self.root.attributes('-topmost', False)
+        self.root.attributes('-topmost', True)
+        self.root.focus_force()
         
-        # Update state if it's in our mapping
-        if key in key_mapping:
-            fan_name, speed = key_mapping[key]
-            self.fan_states[fan_name] = speed
-            
-        # Forward the key press to actual controller
-        self.send_fan(key)
+        # Use after to maintain topmost status periodically
+        self.root.after(200, self.maintain_focus)
 
     def run(self):
         self.root = tk.Tk()
@@ -370,8 +366,12 @@ class UIOverlay(threading.Thread):
         self.root._uioverlay = self  
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
-        self.root.config(cursor="none")      # ← hide the mouse cursor on main panel
-
+        
+        # Hide cursor for touchscreen interface
+        self.root.config(cursor="none")
+        
+        # Hide system-wide cursor
+        hide_cursor_system_wide()
         
         # Panel dimensions
         panel_width = 300
@@ -418,6 +418,9 @@ class UIOverlay(threading.Thread):
         # Bind click event directly
         fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Start maintaining focus
+        self.maintain_focus()
         
         self.root.mainloop()
 
@@ -532,36 +535,3 @@ class UIOverlay(threading.Thread):
         """Show the main menu."""
         # Restore original transparency
         self.root.attributes('-alpha', 0.7)
-
-    def maintain_focus(self):
-        """Ensure application stays in focus and taskbar doesn't appear."""
-        # Force the root window to stay on top
-        self.root.attributes('-topmost', False)
-        self.root.attributes('-topmost', True)
-        self.root.focus_force()
-        
-        # Using after to ensure this happens after UI events settle
-        self.root.after(100, lambda: self.root.focus_force())
-        
-        # For cv2 windows, we need a different approach
-        # Import a function that can activate cv2 windows by name
-        # This is OS dependent, but we can handle it for Windows
-        if hasattr(cv2, 'setWindowProperty'):
-            try:
-                # Try to focus the camera window (assuming window name is "Camera")
-                cv2.setWindowProperty("Camera", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                cv2.setWindowProperty("Camera", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
-            except:
-                pass  # Ignore errors if window doesn't exist
-
-if __name__=='__main__':
-    # Start your cv2 camera+fan process in main thread
-    cam_fan_thread = threading.Thread(target=main, daemon=True)
-    cam_fan_thread.start()
-    # Start the overlay UI
-    ui = UIOverlay(
-        send_camera=lambda c: Controller().press(c) or Controller().release(c),
-        send_fan=lambda k: Controller().press(k) or Controller().release(k)
-    )
-    ui.start()
-    cam_fan_thread.join()
