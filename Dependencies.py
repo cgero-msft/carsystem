@@ -12,3 +12,8 @@ pip3 install pynput
 sudo apt-get install libcblas-dev #this makes it work
 
 
+#force no cursor
+sudo nano /etc/lightdm/lightdm.conf
+#add below the [Seat*] section:
+xserver-command = X -nocursor
+
