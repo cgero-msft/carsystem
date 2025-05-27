@@ -17,3 +17,14 @@ sudo nano /etc/lightdm/lightdm.conf
 #add below the [Seat*] section:
 xserver-command = X -nocursor
 
+#make autostart
+nano /home/cgero88/.config/autostart/main-autostart.desktop
+
+[Desktop Entry]
+Type=Application
+Exec=/usr/bin/python3 /home/cgero88/Main.py
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Main Script
+Comment=Runs Main.py at startup
