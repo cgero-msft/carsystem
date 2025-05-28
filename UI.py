@@ -301,10 +301,29 @@ class OverlayMenu:
             
             return  # Don't destroy the menu
             
-        else:
-            # Normal mode - execute command and close
+        # Add this to the _handle_selection method in OverlayMenu
+        # Add after the multi-view handling but before the fan section
+        elif self.is_camera_menu and text in camera_mapping:
+            # Highlight the selected button
+            self.buttons[text].config(
+                bg="#00A0FF",
+                activebackground="#00A0FF"
+            )
+            
+            # Force UI update to show the highlight
+            self.overlay.update()
+            
+            # Execute command after a small delay
             cmd()
-            self.destroy()
+            
+            # Close the menu after a short delay to show feedback
+            self.overlay.after(300, self.destroy)
+            
+            return  # Don't proceed to the default case
+        
+        # Normal mode - execute command and close
+        cmd()
+        self.destroy()
         
     # Add this method to OverlayMenu class
     def send_camera(self, number):
@@ -334,6 +353,9 @@ class UIOverlay(threading.Thread):
             'Glow': 'Off',     # Fan 2 
             'Brevity': 'Off'   # Fan 3
         }
+
+        # Track active camera (next to fan_states)
+        self.active_camera = None  # Store the active camera name
 
     # Original send_fan wrapper to track states
     def _update_fan_state(self, key):
@@ -511,13 +533,21 @@ class UIOverlay(threading.Thread):
 
     def show_camera_menu(self):
         print("Camera button clicked")  # Debug print
-        OverlayMenu(self.root, [
-            ('Rowley', lambda: self.send_camera('1')),
-            ('Glow', lambda: self.send_camera('2')),
-            ('Brevity', lambda: self.send_camera('3')),
-            ('Multi', lambda: self.send_camera('0'))
+        menu = OverlayMenu(self.root, [
+            ('Rowley', lambda: self._update_camera_state('1')),
+            ('Glow', lambda: self._update_camera_state('2')),
+            ('Brevity', lambda: self._update_camera_state('3')),
+            ('Multi', lambda: self._update_camera_state('0'))
         ], title="Select Camera")
-    
+        
+        # Highlight the active camera if one is set
+        if hasattr(self, 'active_camera') and self.active_camera and self.active_camera in menu.buttons:
+            menu.buttons[self.active_camera].config(
+                bg="#00A0FF",
+                activebackground="#00A0FF"
+            )
+
+
     def hide_main_menu(self):
         """Hide the main menu completely."""
         # Instead of just hiding buttons, make the whole window invisible
@@ -527,6 +557,24 @@ class UIOverlay(threading.Thread):
         """Show the main menu."""
         # Restore original transparency
         self.root.attributes('-alpha', 0.7)
+    
+    # Add this new method to UIOverlay class
+    def _update_camera_state(self, camera_id):
+        """Update which camera is active."""
+        # Map camera IDs to names
+        camera_name_map = {
+            '1': 'Rowley',
+            '2': 'Glow',
+            '3': 'Brevity',
+            '0': 'Multi'  # Multi-view mode
+        }
+        
+        # Update active camera state
+        if camera_id in camera_name_map:
+            self.active_camera = camera_name_map[camera_id]
+        
+        # Forward the camera selection to the actual controller
+        self.send_camera(camera_id)
 
 if __name__=='__main__':
     # Start your cv2 camera+fan process in main thread
