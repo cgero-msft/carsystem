@@ -9,8 +9,58 @@ from adafruit_pca9685 import PCA9685
 import tkinter as tk
 # Fix the import - use the UIOverlay class instead
 from UI import UIOverlay
+import logging
+import os
+from datetime import datetime
+
+##### LOGGING SETUP #####
+# Create logs directory if it doesn't exist
+log_dir = "/home/cgero88/logs"
+os.makedirs(log_dir, exist_ok=True)
+
+# Set up main logger
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f"{log_dir}/carsystem_main.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("CarSystem")
+
+# Camera-specific loggers
+camera_loggers = {}
+for cam_id in ['1', '2', '3']:
+    cam_logger = logging.getLogger(f"Camera{cam_id}")
+    cam_logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(f"{log_dir}/camera_{cam_id}.log")
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    cam_logger.addHandler(handler)
+    camera_loggers[cam_id] = cam_logger
+
+# Create a stats logger for periodic stats
+stats_logger = logging.getLogger("CameraStats")
+stats_logger.setLevel(logging.INFO)
+stats_handler = logging.FileHandler(f"{log_dir}/camera_stats.log")
+stats_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+stats_logger.addHandler(stats_handler)
 
 ##### CAMERA SECTION #####
+# Camera name mapping for better logs
+camera_names = {
+    '1': 'Rowley',
+    '2': 'Carson', 
+    '3': 'Brevity'
+}
+
+# Track camera stats
+camera_stats = {
+    '1': {'frames_read': 0, 'frames_failed': 0, 'last_frame_time': None, 'start_time': None},
+    '2': {'frames_read': 0, 'frames_failed': 0, 'last_frame_time': None, 'start_time': None},
+    '3': {'frames_read': 0, 'frames_failed': 0, 'last_frame_time': None, 'start_time': None}
+}
+
 camera_paths = {
     '1': #direct
         #'/dev/v4l/by-path/platform-fd500000.pcie-pci-0000:01:00.0-usb-0:1.1:1.0-video-index0',
@@ -42,7 +92,7 @@ SCREEN_HEIGHT = 600
 
 # Skip the detection logic since it's returning incorrect values
 def get_screen_resolution():
-    print(f"📺 Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    logger.info(f"Using fixed resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
     return SCREEN_WIDTH, SCREEN_HEIGHT
 
 # Use a global variable to store screen dimensions
@@ -51,7 +101,7 @@ SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
 def get_single_frame(path):
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
-        print(f"❌ Could not open {path}")
+        logger.error(f"Could not open {path}")
         return np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
     ret, frame = cap.read()
     cap.release()
@@ -62,20 +112,38 @@ def get_single_frame(path):
 def show_multiview(cam_keys):
     global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
     stop_thread = False
-    print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
+    logger.info(f"Showing multiview: Camera {camera_names[cam_keys[0]]} and Camera {camera_names[cam_keys[1]]}")
 
     # Ensure we have valid screen dimensions
     if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
-        print("⚠️ Invalid screen dimensions, resetting to defaults")
+        logger.warning("Invalid screen dimensions, resetting to defaults")
         SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
 
     def display():
         caps = []
         for k in cam_keys:
-            cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            caps.append(cap)
+            camera_stats[k]['start_time'] = datetime.now()
+            camera_stats[k]['frames_read'] = 0
+            camera_stats[k]['frames_failed'] = 0
+            
+            camera_name = camera_names[k]
+            camera_loggers[k].info(f"Opening camera {camera_name} at {camera_paths[k]}")
+            
+            try:
+                cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
+                
+                if not cap.isOpened():
+                    camera_loggers[k].error(f"Failed to open camera {camera_name}")
+                    cap = None
+                else:
+                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+                    cap.set(cv2.CAP_PROP_FPS, 30)
+                    camera_loggers[k].info(f"Successfully opened camera {camera_name}, FPS set to 30")
+                
+                caps.append(cap)
+            except Exception as e:
+                camera_loggers[k].error(f"Exception opening camera {camera_name}: {str(e)}")
+                caps.append(None)
 
         # Create window with Raspberry Pi optimized settings
         window_name = 'Camera View'
@@ -98,15 +166,121 @@ def show_multiview(cam_keys):
 
         # Calculate exact half width for each camera
         half_width = SCREEN_WIDTH // 2
+        
+        # Stats logging interval (every 30 seconds)
+        last_stats_log = time.time()
 
         while not stop_thread:
+            # Log camera stats periodically
+            current_time = time.time()
+            if current_time - last_stats_log > 30:  # Every 30 seconds
+                for k in cam_keys:
+                    uptime = "unknown"
+                    if camera_stats[k]['start_time']:
+                        uptime = str(datetime.now() - camera_stats[k]['start_time'])
+                    
+                    total_frames = camera_stats[k]['frames_read'] + camera_stats[k]['frames_failed']
+                    failure_rate = 0
+                    if total_frames > 0:
+                        failure_rate = (camera_stats[k]['frames_failed'] / total_frames) * 100
+                    
+                    stats_logger.info(
+                        f"Camera {camera_names[k]} stats: "
+                        f"Uptime={uptime}, "
+                        f"Frames read={camera_stats[k]['frames_read']}, "
+                        f"Frames failed={camera_stats[k]['frames_failed']}, "
+                        f"Failure rate={failure_rate:.2f}%, "
+                        f"Time since last frame: {datetime.now() - camera_stats[k]['last_frame_time'] if camera_stats[k]['last_frame_time'] else 'N/A'}"
+                    )
+                last_stats_log = current_time
+            
             # Create a fresh black background for each frame
             background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
             
             for i, (cap, k) in enumerate(zip(caps, cam_keys)):
-                ret, frame = cap.read()
-                if not ret:
-                    print(f"⚠️ Camera {k} failed to read")
+                if cap is None:
+                    camera_loggers[k].error(f"Camera {camera_names[k]} is None, cannot read frame")
+                    camera_stats[k]['frames_failed'] += 1
+                    continue
+                    
+                try:
+                    ret, frame = cap.read()
+                    
+                    if not ret:
+                        camera_stats[k]['frames_failed'] += 1
+                        camera_loggers[k].warning(f"Camera {camera_names[k]} failed to read frame")
+                        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    else:
+                        camera_stats[k]['frames_read'] += 1
+                        camera_stats[k]['last_frame_time'] = datetime.now()
+                        
+                        # Log occasional heartbeat for successful frames (every 300 frames ~10 seconds at 30fps)
+                        if camera_stats[k]['frames_read'] % 300 == 0:
+                            camera_loggers[k].info(
+                                f"Camera {camera_names[k]} heartbeat: "
+                                f"{camera_stats[k]['frames_read']} frames read, "
+                                f"{camera_stats[k]['frames_failed']} frames failed"
+                            )
+                    
+                    # Get original frame dimensions
+                    h, w = frame.shape[:2]
+                    
+                    # Calculate scaling factors to FILL exactly half screen width and full height
+                    scale_w = half_width / w
+                    scale_h = SCREEN_HEIGHT / h
+                    scale = max(scale_w, scale_h)  # Use max to fill entire area (will crop)
+                    
+                    # Calculate the dimensions after scaling
+                    scaled_w = int(w * scale)
+                    scaled_h = int(h * scale)
+                    
+                    # Resize frame to the larger size
+                    frame_resized = cv2.resize(frame, (scaled_w, scaled_h))
+                    
+                    # Calculate center crop to get exact dimensions
+                    # Find the center point
+                    center_x = scaled_w // 2
+                    center_y = scaled_h // 2
+                    
+                    # Calculate the crop boundaries for exact half width and full height
+                    crop_x_start = center_x - (half_width // 2)
+                    crop_y_start = center_y - (SCREEN_HEIGHT // 2)
+                    
+                    # Ensure crop boundaries are within the image
+                    crop_x_start = max(0, min(crop_x_start, scaled_w - half_width))
+                    crop_y_start = max(0, min(crop_y_start, scaled_h - SCREEN_HEIGHT))
+                    
+                    # Extract the correctly sized center portion
+                    crop_x_end = crop_x_start + half_width
+                    crop_y_end = crop_y_start + SCREEN_HEIGHT
+                    
+                    # Handle case where scaled image isn't big enough
+                    if crop_x_end > scaled_w:
+                        crop_x_end = scaled_w
+                    if crop_y_end > scaled_h:
+                        crop_y_end = scaled_h
+                    
+                    # Crop the frame to focus on center while filling view
+                    frame_cropped = frame_resized[crop_y_start:crop_y_end, crop_x_start:crop_x_end]
+                    
+                    # Handle case where cropped frame doesn't match required dimensions
+                    final_h, final_w = frame_cropped.shape[:2]
+                    if final_w != half_width or final_h != SCREEN_HEIGHT:
+                        # Create a black canvas of exactly the right size
+                        exact_size = np.zeros((SCREEN_HEIGHT, half_width, 3), dtype=np.uint8)
+                        # Place the cropped frame centered in the canvas
+                        y_offset = (SCREEN_HEIGHT - final_h) // 2
+                        x_offset = (half_width - final_w) // 2
+                        exact_size[y_offset:y_offset+final_h, x_offset:x_offset+final_w] = frame_cropped
+                        frame_cropped = exact_size
+                    
+                    # Place in the correct half of the screen
+                    x_start = i * half_width
+                    background[:, x_start:x_start+half_width] = frame_cropped
+
+                except Exception as e:
+                    camera_loggers[k].error(f"Exception processing frame from {camera_names[k]}: {str(e)}")
+                    camera_stats[k]['frames_failed'] += 1
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 
                 # Get original frame dimensions
@@ -170,8 +344,13 @@ def show_multiview(cam_keys):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        for cap in caps:
-            cap.release()
+        for i, (cap, k) in enumerate(zip(caps, cam_keys)):
+            if cap:
+                try:
+                    cap.release()
+                    camera_loggers[k].info(f"Released camera {camera_names[k]}")
+                except Exception as e:
+                    camera_loggers[k].error(f"Error releasing camera {camera_names[k]}: {str(e)}")
 
     return threading.Thread(target=display)
 
@@ -240,6 +419,8 @@ def show_single(cam_key):
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
 
+    logger.info(f"Switching mode to: {mode}{' with cameras ' + ','.join([camera_names[k] for k in cam_keys]) if cam_keys else ''}")
+
     # Mark old thread for stopping but don't destroy window
     stop_thread = True
     if display_thread and display_thread.is_alive():
@@ -252,6 +433,7 @@ def switch_mode(mode, cam_keys=None):
         
         # Now wait for thread to finish
         display_thread.join()
+        logger.info("Previous display thread terminated")
 
     current_mode = mode
 
@@ -260,9 +442,11 @@ def switch_mode(mode, cam_keys=None):
     elif mode in ['1', '2', '3']:
         display_thread = show_single(mode)
     else:
+        logger.error(f"Invalid mode: {mode}")
         return
 
     display_thread.start()
+    logger.info(f"New display thread started for mode: {mode}")
 
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
@@ -356,10 +540,11 @@ def on_release(key):
 
 ##### MAIN ENTRY POINT #####
 def main():
-    print("🎥 Webcam viewer ready")
-    print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
+    logger.info("Camera system starting up")
+    logger.info("Hotkeys: 1/2/3 = Fullscreen view, 0 + two cameras = Multiview, A/S/D/F/G/H = Fan speed, ESC = Quit")
 
     # Auto-start in multiview mode with Cameras 3 and 1
+    logger.info("Auto-starting in multiview mode with Brevity and Rowley cameras")
     switch_mode('multi', ['3', '1'])
     
     # Set up OpenCV window - keep this part
