@@ -18,12 +18,15 @@ from datetime import datetime
 log_dir = "/home/cgero88/logs"
 os.makedirs(log_dir, exist_ok=True)
 
+# Generate timestamp for this session
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
 # Set up main logger
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(f"{log_dir}/carsystem_main.log"),
+        logging.FileHandler(f"{log_dir}/carsystem_main_{timestamp}.log"),
         logging.StreamHandler()
     ]
 )
@@ -34,7 +37,7 @@ camera_loggers = {}
 for cam_id in ['1', '2', '3']:
     cam_logger = logging.getLogger(f"Camera{cam_id}")
     cam_logger.setLevel(logging.INFO)
-    handler = logging.FileHandler(f"{log_dir}/camera_{cam_id}.log")
+    handler = logging.FileHandler(f"{log_dir}/camera_{cam_id}_{timestamp}.log")
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     cam_logger.addHandler(handler)
     camera_loggers[cam_id] = cam_logger
@@ -42,9 +45,13 @@ for cam_id in ['1', '2', '3']:
 # Create a stats logger for periodic stats
 stats_logger = logging.getLogger("CameraStats")
 stats_logger.setLevel(logging.INFO)
-stats_handler = logging.FileHandler(f"{log_dir}/camera_stats.log")
+stats_handler = logging.FileHandler(f"{log_dir}/camera_stats_{timestamp}.log")
 stats_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 stats_logger.addHandler(stats_handler)
+
+# Log session start with timestamp info
+logger.info(f"Session started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+logger.info(f"Log files using timestamp suffix: {timestamp}")
 
 ##### CAMERA SECTION #####
 # Camera name mapping for better logs
