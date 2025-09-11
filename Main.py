@@ -13,6 +13,10 @@ import os
 import datetime
 import logging
 from logging.handlers import RotatingFileHandler
+import fcntl
+import v4l2
+import select
+import sys
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -254,26 +258,29 @@ def show_single(cam_key):
     # Log camera properties before opening
     logging.info(f"Opening camera {cam_key} from path: {path}")
     
-    cap = cv2.VideoCapture(path)
+    # Use V4L2 capture
+    cap = cv2.VideoCapture(path, cv2.CAP_V4L2)
+    
+    # Set more robust capture parameters
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffering
+    
     if not cap.isOpened():
         logging.error(f"Failed to open camera {cam_key} at path {path}")
         return None
-        
+    
     # Log camera properties
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     logging.info(f"Camera {cam_key} opened with resolution {width}x{height}, target FPS: {fps}")
-
-    # Use the same window name as multiview for persistence
-    window_name = 'Camera View'
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     
-    # Show initial black background while loading
-    black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    cv2.imshow(window_name, black_bg)
-    cv2.waitKey(1)
+    # Flush the buffer by reading several frames
+    for _ in range(5):
+        ret, _ = cap.read()
+        if not ret:
+            break
     
     def display():
         frame_count = 0
@@ -378,23 +385,36 @@ def switch_mode(mode, cam_keys=None):
     
     logging.info(f"Switching mode: {mode}" + (f" with cameras {cam_keys}" if cam_keys else ""))
 
-    # Mark old thread for stopping but don't destroy window
+    # Mark old thread for stopping
     stop_thread = True
     if display_thread and display_thread.is_alive():
         logging.info("Waiting for previous display thread to exit")
-        # Show a black frame before switching
+        # Show transitional frame
         black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
         cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
         cv2.setWindowProperty('Camera View', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         cv2.imshow('Camera View', black_bg)
         cv2.waitKey(1)
         
-        # Now wait for thread to finish
-        display_thread.join()
-        logging.info("Previous display thread exited successfully")
+        # Wait for thread to finish with timeout
+        display_thread.join(timeout=2.0)
+        if display_thread.is_alive():
+            logging.warning("Thread didn't exit cleanly, forcing continuation")
 
     current_mode = mode
 
+    # Reset cameras before starting new mode
+    if mode == 'multi' and cam_keys:
+        for key in cam_keys:
+            if key in camera_paths:
+                reset_camera(camera_paths[key])
+    elif mode in ['1', '2', '3']:
+        reset_camera(camera_paths[mode])
+        
+    # Small delay after reset
+    time.sleep(0.5)
+
+    # Start the new display mode
     if mode == 'multi':
         logging.info(f"Starting multiview display thread with cameras: {cam_keys}")
         display_thread = show_multiview(cam_keys)
@@ -545,6 +565,55 @@ def detect_frozen_frame(current, previous, threshold=3.0):
     if is_frozen:
         logging.warning(f"Detected frozen frame (mean diff: {mean_diff:.2f})")
     return is_frozen
+
+def reset_camera(cam_path):
+    """Reset a camera by closing and reopening it with buffer flushing"""
+    logging.info(f"Resetting camera at {cam_path}")
+    
+    try:
+        # Open camera
+        cap = cv2.VideoCapture(cam_path)
+        if not cap.isOpened():
+            logging.error(f"Failed to open camera at {cam_path} for reset")
+            return
+            
+        # Configure for better performance
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffering
+        
+        # Flush the buffer by reading several frames
+        for _ in range(5):
+            ret, _ = cap.read()
+            if not ret:
+                break
+        
+        # Release and reopen
+        cap.release()
+        
+        logging.info(f"Camera at {cam_path} has been reset")
+    except Exception as e:
+        logging.error(f"Error resetting camera: {e}")
+
+def read_frame_with_timeout(cap, timeout=1.0):
+    """Read a frame with timeout protection"""
+    start_time = time.time()
+    ret, frame = False, None
+    
+    try:
+        ret, frame = cap.read()
+        elapsed = time.time() - start_time
+        
+        if elapsed > 0.1:
+            logging.warning(f"Slow frame read ({elapsed:.3f}s)")
+            
+        if elapsed > timeout:
+            logging.error(f"Frame read timeout exceeded {timeout}s")
+            return False, None
+            
+    except Exception as e:
+        logging.error(f"Exception during frame read: {e}")
+    
+    return ret, frame
 
 ##### MAIN ENTRY POINT #####
 def main():
