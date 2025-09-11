@@ -554,16 +554,19 @@ def detect_black_frame(frame, threshold=10):
         logging.warning(f"Detected black frame (mean value: {mean_value:.2f})")
     return is_black
 
-def detect_frozen_frame(current, previous, threshold=3.0):
+def detect_frozen_frame(current, previous, threshold=10.0):  # Increased from 3.0 to 10.0
     """Detect if frame hasn't changed (returns True if frozen)"""
     if current is None or previous is None:
         return False
+    
     # Calculate difference between frames
     diff = cv2.absdiff(current, previous)
     mean_diff = np.mean(diff)
     is_frozen = mean_diff < threshold
-    if is_frozen:
-        logging.warning(f"Detected frozen frame (mean diff: {mean_diff:.2f})")
+    
+    # Only log if actually frozen, and reduce logging frequency
+    if is_frozen and mean_diff < 2.0:  # Only log for very low differences
+        logging.debug(f"Detected frozen frame (mean diff: {mean_diff:.2f})")
     return is_frozen
 
 def reset_camera(cam_path):
