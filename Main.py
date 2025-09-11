@@ -9,10 +9,6 @@ from adafruit_pca9685 import PCA9685
 import tkinter as tk
 # Fix the import - use the UIOverlay class instead
 from UI import UIOverlay
-import os
-import datetime
-import logging
-from logging.handlers import RotatingFileHandler
 
 ##### CAMERA SECTION #####
 camera_paths = {
@@ -66,39 +62,20 @@ def get_single_frame(path):
 def show_multiview(cam_keys):
     global stop_thread, SCREEN_WIDTH, SCREEN_HEIGHT
     stop_thread = False
-    logging.info(f"Starting multiview mode with cameras: {cam_keys}")
+    print(f"📷 Showing multiview: Camera {cam_keys[0]} and Camera {cam_keys[1]}")
 
     # Ensure we have valid screen dimensions
     if SCREEN_WIDTH <= 0 or SCREEN_HEIGHT <= 0:
-        logging.warning(f"Invalid screen dimensions, resetting to defaults")
+        print("⚠️ Invalid screen dimensions, resetting to defaults")
         SCREEN_WIDTH, SCREEN_HEIGHT = 1024, 600
 
     def display():
         caps = []
-        last_frames = {}
-        consecutive_errors = {k: 0 for k in cam_keys}
-        consecutive_black = {k: 0 for k in cam_keys}
-        consecutive_frozen = {k: 0 for k in cam_keys}
-        frame_counts = {k: 0 for k in cam_keys}
-        last_log_time = time.time()
-        
-        for i, k in enumerate(cam_keys):
-            path = camera_paths[k]
-            logging.info(f"Opening camera {k} from path: {path}")
+        for k in cam_keys:
             cap = cv2.VideoCapture(camera_paths[k], cv2.CAP_V4L2)
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
             cap.set(cv2.CAP_PROP_FPS, 30)
-            
-            if cap.isOpened():
-                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                logging.info(f"Camera {k} opened with resolution {width}x{height}, target FPS: {fps}")
-            else:
-                logging.error(f"Failed to open camera {k}")
-            
             caps.append(cap)
-            last_frames[k] = None
 
         # Create window with Raspberry Pi optimized settings
         window_name = 'Camera View'
@@ -123,59 +100,14 @@ def show_multiview(cam_keys):
         half_width = SCREEN_WIDTH // 2
 
         while not stop_thread:
-            # Log FPS every 5 seconds
-            current_time = time.time()
-            if current_time - last_log_time >= 5.0:
-                elapsed = current_time - last_log_time
-                for k in cam_keys:
-                    fps = frame_counts[k] / elapsed if elapsed > 0 else 0
-                    logging.info(f"Camera {k} (multiview): Processed {frame_counts[k]} frames in {elapsed:.2f}s ({fps:.2f} FPS)")
-                    frame_counts[k] = 0
-                last_log_time = current_time
-            
             # Create a fresh black background for each frame
             background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
             
             for i, (cap, k) in enumerate(zip(caps, cam_keys)):
-                frame_read_start = time.time()
                 ret, frame = cap.read()
-                frame_read_duration = time.time() - frame_read_start
-                
-                if frame_read_duration > 0.1:
-                    logging.warning(f"Camera {k} (multiview): Slow frame read ({frame_read_duration:.3f}s)")
-                
                 if not ret:
-                    consecutive_errors[k] += 1
-                    if consecutive_errors[k] == 1 or consecutive_errors[k] % 10 == 0:
-                        logging.error(f"Camera {k} (multiview): Failed to read frame. Consecutive errors: {consecutive_errors[k]}")
+                    print(f"⚠️ Camera {k} failed to read")
                     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                else:
-                    if consecutive_errors[k] > 0:
-                        logging.info(f"Camera {k} (multiview): Frame reading resumed after {consecutive_errors[k]} errors")
-                        consecutive_errors[k] = 0
-                    frame_counts[k] += 1
-                
-                # Check for black frames
-                if detect_black_frame(frame):
-                    consecutive_black[k] += 1
-                    if consecutive_black[k] == 1 or consecutive_black[k] % 10 == 0:
-                        logging.warning(f"Camera {k} (multiview): Black frame detected. Consecutive: {consecutive_black[k]}")
-                else:
-                    if consecutive_black[k] > 0:
-                        logging.info(f"Camera {k} (multiview): Normal frames resumed after {consecutive_black[k]} black frames")
-                        consecutive_black[k] = 0
-                
-                # Check for frozen frames
-                if last_frames[k] is not None and detect_frozen_frame(frame, last_frames[k]):
-                    consecutive_frozen[k] += 1
-                    if consecutive_frozen[k] == 1 or consecutive_frozen[k] % 10 == 0:
-                        logging.warning(f"Camera {k} (multiview): Possible frozen frame. Consecutive: {consecutive_frozen[k]}")
-                else:
-                    if consecutive_frozen[k] > 0:
-                        logging.info(f"Camera {k} (multiview): Frame changes detected after {consecutive_frozen[k]} possibly frozen frames")
-                        consecutive_frozen[k] = 0
-                
-                last_frames[k] = frame.copy()
                 
                 # Get original frame dimensions
                 h, w = frame.shape[:2]
@@ -238,7 +170,6 @@ def show_multiview(cam_keys):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        logging.info(f"Multiview display thread stopping, releasing resources")
         for cap in caps:
             cap.release()
 
@@ -248,22 +179,12 @@ def show_single(cam_key):
     global stop_thread
     stop_thread = False
     
-    logging.info(f"Starting single view mode for Camera {cam_key}")
+    print(f"🔎 Fullscreen view: Camera {cam_key}")
     path = camera_paths[cam_key]
-    
-    # Log camera properties before opening
-    logging.info(f"Opening camera {cam_key} from path: {path}")
-    
     cap = cv2.VideoCapture(path)
     if not cap.isOpened():
-        logging.error(f"Failed to open camera {cam_key} at path {path}")
+        print(f"❌ Failed to open {path}")
         return None
-        
-    # Log camera properties
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    logging.info(f"Camera {cam_key} opened with resolution {width}x{height}, target FPS: {fps}")
 
     # Use the same window name as multiview for persistence
     window_name = 'Camera View'
@@ -274,65 +195,13 @@ def show_single(cam_key):
     black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
     cv2.imshow(window_name, black_bg)
     cv2.waitKey(1)
-    
+
     def display():
-        frame_count = 0
-        start_time = time.time()
-        last_log_time = start_time
-        last_frame = None
-        consecutive_errors = 0
-        consecutive_frozen = 0
-        consecutive_black = 0
-        
         while not stop_thread:
-            # Log actual achieved FPS every 5 seconds
-            current_time = time.time()
-            if current_time - last_log_time >= 5.0:
-                elapsed = current_time - last_log_time
-                fps = frame_count / elapsed if elapsed > 0 else 0
-                logging.info(f"Camera {cam_key}: Processed {frame_count} frames in {elapsed:.2f}s ({fps:.2f} FPS)")
-                frame_count = 0
-                last_log_time = current_time
-            
-            # Read frame with timeout detection
-            frame_read_start = time.time()
             ret, frame = cap.read()
-            frame_read_duration = time.time() - frame_read_start
-            
-            # Log frame reading performance
-            if frame_read_duration > 0.1:  # Log slow reads
-                logging.warning(f"Camera {cam_key}: Slow frame read ({frame_read_duration:.3f}s)")
-            
             if not ret:
-                consecutive_errors += 1
-                if consecutive_errors == 1 or consecutive_errors % 10 == 0:
-                    logging.error(f"Camera {cam_key}: Failed to read frame. Consecutive errors: {consecutive_errors}")
                 time.sleep(0.1)
                 continue
-            else:
-                if consecutive_errors > 0:
-                    logging.info(f"Camera {cam_key}: Frame reading resumed after {consecutive_errors} errors")
-                    consecutive_errors = 0
-            
-            # Check for black frames
-            if detect_black_frame(frame):
-                consecutive_black += 1
-                if consecutive_black == 1 or consecutive_black % 10 == 0:
-                    logging.warning(f"Camera {cam_key}: Black frame detected. Consecutive: {consecutive_black}")
-            else:
-                if consecutive_black > 0:
-                    logging.info(f"Camera {cam_key}: Normal frames resumed after {consecutive_black} black frames")
-                    consecutive_black = 0
-            
-            # Check for frozen frames
-            if last_frame is not None and detect_frozen_frame(frame, last_frame):
-                consecutive_frozen += 1
-                if consecutive_frozen == 1 or consecutive_frozen % 10 == 0:
-                    logging.warning(f"Camera {cam_key}: Possible frozen frame. Consecutive: {consecutive_frozen}")
-            else:
-                if consecutive_frozen > 0:
-                    logging.info(f"Camera {cam_key}: Frame changes detected after {consecutive_frozen} possibly frozen frames")
-                    consecutive_frozen = 0
             
             # Get original frame dimensions
             h, w = frame.shape[:2]
@@ -364,24 +233,16 @@ def show_single(cam_key):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
                 
-            # Increment frame counter
-            frame_count += 1
-            last_frame = frame.copy()  # Store current frame for freeze detection
-                
-        logging.info(f"Camera {cam_key}: Display thread stopping, releasing resources")
         cap.release()
 
     return threading.Thread(target=display)
 
 def switch_mode(mode, cam_keys=None):
     global current_mode, stop_thread, display_thread
-    
-    logging.info(f"Switching mode: {mode}" + (f" with cameras {cam_keys}" if cam_keys else ""))
 
     # Mark old thread for stopping but don't destroy window
     stop_thread = True
     if display_thread and display_thread.is_alive():
-        logging.info("Waiting for previous display thread to exit")
         # Show a black frame before switching
         black_bg = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
         cv2.namedWindow('Camera View', cv2.WINDOW_NORMAL)
@@ -391,18 +252,14 @@ def switch_mode(mode, cam_keys=None):
         
         # Now wait for thread to finish
         display_thread.join()
-        logging.info("Previous display thread exited successfully")
 
     current_mode = mode
 
     if mode == 'multi':
-        logging.info(f"Starting multiview display thread with cameras: {cam_keys}")
         display_thread = show_multiview(cam_keys)
     elif mode in ['1', '2', '3']:
-        logging.info(f"Starting single view display thread for camera: {mode}")
         display_thread = show_single(mode)
     else:
-        logging.warning(f"Unknown mode requested: {mode}")
         return
 
     display_thread.start()
@@ -497,66 +354,10 @@ def on_release(key):
             display_thread.join()
         return False  # This stops the keyboard listener
 
-##### LOGGING #####
-# Add this function to set up logging
-def setup_logging():
-    """Set up logging to file and console"""
-    # Create logs directory if it doesn't exist
-    log_dir = "/home/cgero88/logs"
-    os.makedirs(log_dir, exist_ok=True)
-    
-    # Create timestamped log file
-    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"{log_dir}/camera_log_{current_time}.txt"
-    
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(message)s',
-        handlers=[
-            RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5),
-            logging.StreamHandler()  # Also log to console
-        ]
-    )
-    
-    logging.info(f"Logging initialized. Writing to {log_file}")
-    logging.info(f"Camera paths: {camera_paths}")
-    return log_file
-
-# Add frame quality monitoring functions
-def detect_black_frame(frame, threshold=10):
-    """Detect if a frame is mostly black (returns True if black)"""
-    if frame is None:
-        return True
-    mean_value = np.mean(frame)
-    is_black = mean_value < threshold
-    if is_black:
-        logging.warning(f"Detected black frame (mean value: {mean_value:.2f})")
-    return is_black
-
-def detect_frozen_frame(current, previous, threshold=3.0):
-    """Detect if frame hasn't changed (returns True if frozen)"""
-    if current is None or previous is None:
-        return False
-    # Calculate difference between frames
-    diff = cv2.absdiff(current, previous)
-    mean_diff = np.mean(diff)
-    is_frozen = mean_diff < threshold
-    if is_frozen:
-        logging.warning(f"Detected frozen frame (mean diff: {mean_diff:.2f})")
-    return is_frozen
-
 ##### MAIN ENTRY POINT #####
 def main():
-    # Setup logging
-    log_file = setup_logging()
-    
-    logging.info("🎥 Webcam viewer starting")
-    logging.info("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
-    
-    # Log system info
-    logging.info(f"Screen dimensions: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-    logging.info(f"Camera paths: {camera_paths}")
+    print("🎥 Webcam viewer ready")
+    print("🕹️  Hotkeys:\n  - 1/2/3 = Fullscreen view\n  - 0 + two cameras = Multiview\n  - A/S/D/F/G/H = Fan speed\n  - ESC = Quit")
 
     # Auto-start in multiview mode with Cameras 3 and 1
     switch_mode('multi', ['3', '1'])
@@ -586,7 +387,4 @@ def main():
         listener.join()
 
 if __name__ == "__main__":
-    # Set up logging immediately on startup
-    setup_logging()
-    
     main()
