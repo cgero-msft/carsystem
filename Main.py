@@ -89,6 +89,7 @@ camera_paths = {
 }
 
 current_mode = None
+current_cam_keys = None
 stop_thread = False
 display_thread = None
 multiview_selection = []
@@ -96,6 +97,9 @@ multiview_selection = []
 # Hardcode a reasonable default resolution that works on Pi displays
 SCREEN_WIDTH = 1024
 SCREEN_HEIGHT = 600
+
+# Timeout (seconds) when waiting for the display thread to stop
+DISPLAY_THREAD_SHUTDOWN_TIMEOUT = 5
 
 # Skip the detection logic since it's returning incorrect values
 def get_screen_resolution():
@@ -424,7 +428,7 @@ def show_single(cam_key):
     return threading.Thread(target=display)
 
 def switch_mode(mode, cam_keys=None):
-    global current_mode, stop_thread, display_thread
+    global current_mode, current_cam_keys, stop_thread, display_thread
 
     logger.info(f"Switching mode to: {mode}{' with cameras ' + ','.join([camera_names[k] for k in cam_keys]) if cam_keys else ''}")
 
@@ -443,6 +447,7 @@ def switch_mode(mode, cam_keys=None):
         logger.info("Previous display thread terminated")
 
     current_mode = mode
+    current_cam_keys = cam_keys if mode == 'multi' else None
 
     if mode == 'multi':
         display_thread = show_multiview(cam_keys)
@@ -454,6 +459,23 @@ def switch_mode(mode, cam_keys=None):
 
     display_thread.start()
     logger.info(f"New display thread started for mode: {mode}")
+
+
+def show_hotspot_message():
+    """Show a message on the Pi display indicating cameras are unavailable."""
+    window_name = 'Camera View'
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
+    text = "Camera not available when system is in hotspot mode"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    text_size = cv2.getTextSize(text, font, 0.7, 2)[0]
+    text_x = (SCREEN_WIDTH - text_size[0]) // 2
+    text_y = (SCREEN_HEIGHT + text_size[1]) // 2
+    cv2.putText(background, text, (text_x, text_y), font, 0.7, (255, 255, 255), 2)
+    cv2.imshow(window_name, background)
+    cv2.waitKey(1)
+
 
 ##### FAN SECTION #####
 i2c = busio.I2C(SCL, SDA)
@@ -569,9 +591,38 @@ def main():
     def send_fan(key):
         kb_controller.press(key)
         kb_controller.release(key)
+
+    # Callback: stop the local display thread (so cameras can be used by Flask stream)
+    def stop_display():
+        global stop_thread, display_thread
+        stop_thread = True
+        if display_thread and display_thread.is_alive():
+            display_thread.join(timeout=DISPLAY_THREAD_SHUTDOWN_TIMEOUT)
+        logger.info("Local display stopped for hotspot mode")
+
+    # Callback: resume the local display using the last active mode
+    def resume_display():
+        global current_mode, current_cam_keys
+        mode = current_mode
+        keys = current_cam_keys
+        if mode:
+            logger.info(f"Resuming local display in mode: {mode}")
+            switch_mode(mode, keys)
+
+    # Function for RemoteServer to query the current display state
+    def get_display_state():
+        return {'mode': current_mode, 'cam_keys': current_cam_keys}
     
     # Start the UI overlay thread
-    ui = UIOverlay(send_camera=send_camera, send_fan=send_fan)
+    ui = UIOverlay(
+        send_camera=send_camera,
+        send_fan=send_fan,
+        camera_paths=camera_paths,
+        stop_display_fn=stop_display,
+        resume_display_fn=resume_display,
+        show_hotspot_msg_fn=show_hotspot_message,
+        get_display_state_fn=get_display_state,
+    )
     ui.start()
     
     # Continue with keyboard listener

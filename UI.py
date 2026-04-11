@@ -6,6 +6,7 @@ import cv2, numpy as np
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
+from hotspot import RemoteServer
 
 # --- Your existing camera & fan code remains unchanged ---
 # (Copy your entire background code: show_single, show_multiview, switch_mode, on_press, on_release, main)
@@ -341,12 +342,18 @@ class OverlayMenu:
             self.overlay.destroy()
 
 class UIOverlay(threading.Thread):
-    def __init__(self, send_camera, send_fan):
+    def __init__(self, send_camera, send_fan, camera_paths=None,
+                 stop_display_fn=None, resume_display_fn=None,
+                 show_hotspot_msg_fn=None, get_display_state_fn=None):
         super().__init__(daemon=True)
         self.send_camera = send_camera
         self.send_fan = send_fan
         self.root = None
-        
+        self.stop_display_fn = stop_display_fn
+        self.resume_display_fn = resume_display_fn
+        self.show_hotspot_msg_fn = show_hotspot_msg_fn
+        self.hotspot_btn = None
+
         # Track current fan states (initially all Off)
         self.fan_states = {
             'Rowley': 'Off',   # Fan 1
@@ -356,6 +363,16 @@ class UIOverlay(threading.Thread):
 
         # Track active camera (next to fan_states)
         self.active_camera = None  # Store the active camera name
+
+        # Remote server for phone control via hotspot
+        self.remote_server = RemoteServer(
+            send_camera_fn=send_camera,
+            send_fan_fn=send_fan,
+            camera_paths=camera_paths or {},
+            stop_display_fn=stop_display_fn,
+            resume_display_fn=resume_display_fn,
+            get_display_state_fn=get_display_state_fn,
+        )
 
     # Original send_fan wrapper to track states
     def _update_fan_state(self, key):
@@ -390,8 +407,8 @@ class UIOverlay(threading.Thread):
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         
-        # Panel dimensions
-        panel_width = 300
+        # Panel dimensions — widened to accommodate 3 buttons
+        panel_width = 450
         panel_height = 60
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -435,6 +452,20 @@ class UIOverlay(threading.Thread):
         # Bind click event directly
         fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Hotspot button — toggles Wi-Fi hotspot + mobile web UI
+        self.hotspot_btn = tk.Button(
+            self.root,
+            text="📡 Hotspot",
+            bg="#555555",
+            fg="white",
+            activebackground="#555555",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+            width=button_width
+        )
+        self.hotspot_btn.config(command=self.toggle_hotspot)
+        self.hotspot_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
@@ -547,6 +578,41 @@ class UIOverlay(threading.Thread):
                 activebackground="#00A0FF"
             )
 
+
+    def toggle_hotspot(self):
+        """Toggle the Wi-Fi hotspot and mobile web remote on/off."""
+        if self.remote_server.is_running:
+            # Stop remote server first, then resume local display
+            self.remote_server.stop()
+            if self.resume_display_fn:
+                self.resume_display_fn()
+            if self.hotspot_btn:
+                self.hotspot_btn.config(
+                    bg="#555555",
+                    activebackground="#555555",
+                    text="📡 Hotspot"
+                )
+            print("Hotspot OFF — local display resumed")
+        else:
+            # Stop local display, show hotspot message, then start remote server
+            if self.stop_display_fn:
+                self.stop_display_fn()
+            if self.show_hotspot_msg_fn:
+                self.show_hotspot_msg_fn()
+            success = self.remote_server.start()
+            if success:
+                if self.hotspot_btn:
+                    self.hotspot_btn.config(
+                        bg="#00C853",
+                        activebackground="#00C853",
+                        text="📡 ON"
+                    )
+                print(f"Hotspot ON — Connect to 'Dogmobile' Wi-Fi, open http://10.42.0.1:{self.remote_server.port}")
+            else:
+                # Failed to start hotspot — restore local display
+                if self.resume_display_fn:
+                    self.resume_display_fn()
+                print("❌ Failed to start hotspot")
 
     def hide_main_menu(self):
         """Hide the main menu completely."""
