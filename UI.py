@@ -6,6 +6,7 @@ import cv2, numpy as np
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
+from hotspot import RemoteServer
 
 # --- Your existing camera & fan code remains unchanged ---
 # (Copy your entire background code: show_single, show_multiview, switch_mode, on_press, on_release, main)
@@ -357,6 +358,13 @@ class UIOverlay(threading.Thread):
         # Track active camera (next to fan_states)
         self.active_camera = None  # Store the active camera name
 
+        # Remote server for phone control via hotspot
+        self.remote_server = RemoteServer(
+            send_camera_fn=send_camera,
+            send_fan_fn=send_fan
+        )
+        self.hotspot_btn = None
+
     # Original send_fan wrapper to track states
     def _update_fan_state(self, key):
         # Map key to fan name and speed
@@ -391,7 +399,7 @@ class UIOverlay(threading.Thread):
         self.root.attributes('-topmost', True)
         
         # Panel dimensions
-        panel_width = 300
+        panel_width = 450
         panel_height = 60
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -404,7 +412,7 @@ class UIOverlay(threading.Thread):
         self.root.attributes('-alpha', 0.7)
         
         # Equal width buttons
-        button_width = 10
+        button_width = 8
         
         # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
@@ -435,6 +443,20 @@ class UIOverlay(threading.Thread):
         # Bind click event directly
         fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Hotspot button (initially gray, turns green when active)
+        self.hotspot_btn = tk.Button(
+            self.root,
+            text="\U0001f4e1 Hotspot",
+            bg="#555555",
+            fg="white",
+            activebackground="#555555",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+            width=button_width
+        )
+        self.hotspot_btn.config(command=self.toggle_hotspot)
+        self.hotspot_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
@@ -547,6 +569,28 @@ class UIOverlay(threading.Thread):
                 activebackground="#00A0FF"
             )
 
+
+    def toggle_hotspot(self):
+        """Toggle the Wi-Fi hotspot and web remote on/off."""
+        if self.remote_server.is_running:
+            self.remote_server.stop()
+            self.hotspot_btn.config(
+                bg="#555555",
+                activebackground="#555555",
+                text="\U0001f4e1 Hotspot"
+            )
+            print("Hotspot OFF")
+        else:
+            success = self.remote_server.start()
+            if success:
+                self.hotspot_btn.config(
+                    bg="#00C853",
+                    activebackground="#00C853",
+                    text="\U0001f4e1 ON"
+                )
+                print("Hotspot ON — Connect to 'Dogmobile' Wi-Fi, open http://10.42.0.1:8080")
+            else:
+                print("Failed to start hotspot")
 
     def hide_main_menu(self):
         """Hide the main menu completely."""
