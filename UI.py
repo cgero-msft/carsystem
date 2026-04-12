@@ -421,7 +421,7 @@ class UIOverlay(threading.Thread):
         self.root.attributes('-alpha', 0.7)
         
         # Equal width buttons
-        button_width = 10
+        button_width = 8
         
         # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
