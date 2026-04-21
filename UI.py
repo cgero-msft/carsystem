@@ -423,21 +423,35 @@ class UIOverlay(threading.Thread):
         self.root.configure(bg='#333333')
         self.root.attributes('-alpha', 0.7)
         
-        # Equal width buttons
+        # Network button pinned to the right — pack first so Camera/Fan claim remaining space
+        self.hotspot_btn = tk.Button(
+            self.root,
+            text="📡 Network",
+            bg="#555555",
+            fg="white",
+            activebackground="#555555",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+            width=10
+        )
+        self.hotspot_btn.bind("<ButtonPress-1>", self._on_network_btn_press)
+        self.hotspot_btn.bind("<ButtonRelease-1>", self._on_network_btn_release)
+        self.hotspot_btn.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+
+        # Camera and Fan buttons split the remaining center space equally
         button_width = 8
-        
+
         # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
             self.root, 
             text="Camera",
             bg="#0078D7",
             fg="white",
-            activebackground="#0078D7",  # Same as bg
-            activeforeground="white",    # Same as fg
+            activebackground="#0078D7",
+            activeforeground="white",
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        # Bind click event directly
         camera_btn.config(command=self.show_camera_menu)
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
@@ -447,29 +461,13 @@ class UIOverlay(threading.Thread):
             text="Fan",
             bg="#0078D7", 
             fg="white",
-            activebackground="#0078D7",  # Same as bg
-            activeforeground="white",    # Same as fg
-            font=("Arial", 12, "bold"),
-            width=button_width
-        )
-        # Bind click event directly
-        fan_btn.config(command=self.show_fan_menu)
-        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Network button — smart connect on tap, manual menu on long-press
-        self.hotspot_btn = tk.Button(
-            self.root,
-            text="📡 Network",
-            bg="#555555",
-            fg="white",
-            activebackground="#555555",
+            activebackground="#0078D7",
             activeforeground="white",
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        self.hotspot_btn.bind("<ButtonPress-1>", self._on_network_btn_press)
-        self.hotspot_btn.bind("<ButtonRelease-1>", self._on_network_btn_release)
-        self.hotspot_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        fan_btn.config(command=self.show_fan_menu)
+        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
