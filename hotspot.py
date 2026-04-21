@@ -1,3 +1,5 @@
+import json
+import os
 import subprocess
 import threading
 import time
@@ -14,6 +16,14 @@ HOTSPOT_GATEWAY_IP = "10.42.0.1"
 
 STREAM_JPEG_QUALITY = 65
 STREAM_THREAD_SHUTDOWN_TIMEOUT = 3
+
+# ---- Network Configuration ----
+
+NETWORKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "networks.json")
+WIFI_INTERFACE = "wlan0"
+# Brief pause (seconds) between stopping one network mode and starting another.
+# Allows the OS to fully tear down the previous interface before reconnecting.
+NETWORK_TRANSITION_DELAY = 1
 
 
 def start_hotspot():
@@ -67,6 +77,268 @@ def is_hotspot_active():
         return HOTSPOT_CON_NAME in result.stdout
     except Exception:
         return False
+
+
+# ---- Saved Network Management ----
+
+def load_saved_networks():
+    """Load saved networks from networks.json. Returns a list of network dicts."""
+    try:
+        with open(NETWORKS_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get('saved_networks', [])
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_network(name, ssid, password, icon="📶"):
+    """Add or update a network entry in networks.json. Returns True on success."""
+    networks = load_saved_networks()
+    for net in networks:
+        if net.get('ssid') == ssid:
+            net.update({'name': name, 'password': password, 'icon': icon})
+            break
+    else:
+        networks.append({'name': name, 'icon': icon, 'ssid': ssid, 'password': password})
+    try:
+        with open(NETWORKS_FILE, 'w') as f:
+            json.dump({'saved_networks': networks}, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to save network: {e}")
+        return False
+
+
+def scan_wifi():
+    """Scan for available Wi-Fi networks via nmcli. Returns list sorted by signal strength."""
+    try:
+        result = subprocess.run(
+            ["nmcli", "--terse", "--fields", "SSID,SIGNAL,SECURITY",
+             "device", "wifi", "list", "ifname", WIFI_INTERFACE],
+            capture_output=True, text=True, timeout=15
+        )
+        networks = []
+        seen = set()
+        for line in result.stdout.splitlines():
+            parts = line.split(':')
+            if len(parts) < 2:
+                continue
+            ssid = parts[0].strip()
+            if not ssid or ssid in seen:
+                continue
+            try:
+                signal = int(parts[1].strip())
+            except ValueError:
+                signal = 0
+            security = parts[2].strip() if len(parts) > 2 else ""
+            networks.append({'ssid': ssid, 'signal': signal, 'security': security})
+            seen.add(ssid)
+        networks.sort(key=lambda x: x['signal'], reverse=True)
+        return networks
+    except subprocess.TimeoutExpired:
+        print("❌ Wi-Fi scan timed out")
+        return []
+    except Exception as e:
+        print(f"❌ Failed to scan Wi-Fi: {e}")
+        return []
+
+
+def get_available_known_networks():
+    """Cross-reference live scan results with saved networks. Returns matches sorted by signal."""
+    saved = {net['ssid']: net for net in load_saved_networks()}
+    if not saved:
+        return []
+    available = scan_wifi()
+    matches = []
+    for net in available:
+        if net['ssid'] in saved:
+            merged = dict(saved[net['ssid']])
+            merged['signal'] = net['signal']
+            matches.append(merged)
+    return matches  # Already sorted by signal from scan_wifi()
+
+
+def join_network(ssid, password):
+    """Connect WIFI_INTERFACE to an existing Wi-Fi network via nmcli. Returns True on success."""
+    try:
+        cmd = ["sudo", "nmcli", "device", "wifi", "connect", ssid,
+               "ifname", WIFI_INTERFACE]
+        if password:
+            cmd += ["password", password]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            print(f"✅ Connected to '{ssid}'")
+            return True
+        print(f"❌ Failed to connect to '{ssid}': {result.stderr.strip()}")
+        return False
+    except subprocess.TimeoutExpired:
+        print(f"❌ Connection to '{ssid}' timed out")
+        return False
+    except Exception as e:
+        print(f"❌ Error connecting to '{ssid}': {e}")
+        return False
+
+
+def disconnect_network():
+    """Disconnect WIFI_INTERFACE from any joined Wi-Fi network. Returns True on success."""
+    try:
+        subprocess.run(
+            ["sudo", "nmcli", "device", "disconnect", WIFI_INTERFACE],
+            capture_output=True, text=True, timeout=10
+        )
+        print(f"✅ Disconnected {WIFI_INTERFACE}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to disconnect: {e}")
+        return False
+
+
+def get_current_ip():
+    """Get the current IPv4 address of WIFI_INTERFACE, or None if unavailable."""
+    try:
+        result = subprocess.run(
+            ["ip", "-4", "addr", "show", WIFI_INTERFACE],
+            capture_output=True, text=True, timeout=5
+        )
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("inet "):
+                return line.split()[1].split('/')[0]
+        return None
+    except Exception:
+        return None
+
+
+# ---- Captive Portal HTML ----
+
+SETUP_HTML = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Add Network — Dogmobile</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #1a1a1a; color: white; font-family: Arial, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px; min-height: 100vh;
+        }
+        h1 { margin-bottom: 20px; font-size: 22px; }
+        h2 { margin: 15px 0 8px; font-size: 16px; color: #0078D7; }
+        .section { width: 100%; max-width: 400px; margin-bottom: 20px; }
+        .network-item {
+            padding: 12px 16px; margin: 6px 0; border-radius: 8px;
+            background: #333; cursor: pointer; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .network-item:active { background: #005fa3; }
+        .network-item.selected { background: #0078D7; }
+        .signal { color: #ccc; font-size: 13px; }
+        input {
+            width: 100%; padding: 12px; font-size: 16px; border-radius: 8px;
+            border: none; background: #333; color: white; margin-top: 8px;
+        }
+        button {
+            width: 100%; padding: 16px; font-size: 16px; font-weight: bold;
+            border: none; border-radius: 8px; cursor: pointer;
+            background: #0078D7; color: white; margin-top: 12px;
+        }
+        button:active { background: #005fa3; }
+        #status { text-align: center; margin-top: 16px; color: #aaa; font-size: 14px; line-height: 1.6; }
+        .loading { color: #888; text-align: center; padding: 20px; }
+        a { color: #0078D7; }
+    </style>
+</head>
+<body>
+    <h1>➕ Add Network</h1>
+
+    <div class="section">
+        <h2>Nearby Networks</h2>
+        <div id="networks-list"><div class="loading">🔍 Scanning…</div></div>
+    </div>
+
+    <div class="section" id="connect-form" style="display:none">
+        <h2>Connect to: <span id="selected-ssid-label"></span></h2>
+        <input type="text" id="ssid-input" placeholder="Network name (SSID)" />
+        <input type="password" id="password-input" placeholder="Password (leave blank if open)" />
+        <input type="text" id="name-input" placeholder="Friendly name (e.g. Home, Starbucks)" />
+        <button onclick="connectNetwork()">Connect &amp; Save</button>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+        let selectedSSID = '';
+
+        async function scanNetworks() {
+            document.getElementById('networks-list').innerHTML = '<div class="loading">🔍 Scanning…</div>';
+            try {
+                const res = await fetch('/api/scan_networks');
+                const data = await res.json();
+                const list = document.getElementById('networks-list');
+                if (!data.networks || data.networks.length === 0) {
+                    list.innerHTML = '<div class="loading">No networks found. <a href="#" onclick="scanNetworks()">Retry</a></div>';
+                    return;
+                }
+                list.innerHTML = data.networks.map(n =>
+                    `<div class="network-item" onclick="selectNetwork(this, ${JSON.stringify(n.ssid)})">
+                        <span>${n.ssid}</span>
+                        <span class="signal">📶 ${n.signal}%</span>
+                    </div>`
+                ).join('');
+            } catch(e) {
+                document.getElementById('networks-list').innerHTML =
+                    '<div class="loading">Scan failed. <a href="#" onclick="scanNetworks()">Retry</a></div>';
+            }
+        }
+
+        function selectNetwork(el, ssid) {
+            document.querySelectorAll('.network-item').forEach(e => e.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedSSID = ssid;
+            document.getElementById('ssid-input').value = ssid;
+            document.getElementById('name-input').value = ssid;
+            document.getElementById('password-input').value = '';
+            document.getElementById('selected-ssid-label').textContent = ssid;
+            document.getElementById('connect-form').style.display = 'block';
+        }
+
+        async function connectNetwork() {
+            const ssid = document.getElementById('ssid-input').value.trim();
+            const password = document.getElementById('password-input').value;
+            const name = document.getElementById('name-input').value.trim() || ssid;
+            if (!ssid) {
+                document.getElementById('status').textContent = 'Please enter a network name.';
+                return;
+            }
+            document.getElementById('status').textContent = '⏳ Saving and connecting…';
+            try {
+                const res = await fetch('/setup/connect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ssid, password, name})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('status').innerHTML =
+                        '✅ Credentials saved! The Pi is connecting to <strong>' + ssid + '</strong>.<br>' +
+                        'Please rejoin that network on your phone, then open<br>' +
+                        '<strong>http://dogmobile.local:8080</strong>';
+                } else {
+                    document.getElementById('status').textContent = '❌ ' + (data.error || 'Connection failed');
+                }
+            } catch(e) {
+                document.getElementById('status').textContent = '❌ Error: ' + e.message;
+            }
+        }
+
+        scanNetworks();
+    </script>
+</body>
+</html>
+"""
 
 
 # ---- PWA HTML ----
@@ -266,6 +538,46 @@ def create_web_app(remote_server):
         else:
             return jsonify({"status": "Unknown command"}), 400
 
+    @app.route('/setup')
+    def setup():
+        return render_template_string(SETUP_HTML)
+
+    @app.route('/api/scan_networks')
+    def api_scan_networks():
+        networks = scan_wifi()
+        return jsonify({'networks': networks})
+
+    @app.route('/setup/connect', methods=['POST'])
+    def setup_connect():
+        data = request.get_json() or {}
+        ssid = data.get('ssid', '').strip()
+        password = data.get('password', '')
+        name = (data.get('name', '') or ssid).strip()
+        icon = data.get('icon', '📶')
+
+        if not ssid:
+            return jsonify({'success': False, 'error': 'SSID is required'}), 400
+
+        save_network(name, ssid, password, icon)
+
+        # Transition to the new network in a background thread so the HTTP
+        # response can be sent before the hotspot goes down.
+        threading.Thread(
+            target=lambda: remote_server.switch_to_joined(ssid, password, name),
+            daemon=True
+        ).start()
+
+        return jsonify({'success': True, 'ssid': ssid, 'name': name})
+
+    @app.route('/api/network_status')
+    def network_status():
+        ip = get_current_ip() if remote_server.mode == 'joined' else HOTSPOT_GATEWAY_IP
+        return jsonify({
+            'mode': remote_server.mode,
+            'network_name': remote_server.active_network_name,
+            'ip': ip,
+        })
+
     return app
 
 
@@ -287,7 +599,14 @@ def _stream_generator(remote_server):
 # ---- Remote Server ----
 
 class RemoteServer:
-    """Manages the hotspot + Flask web server + MJPEG camera stream lifecycle."""
+    """Manages Wi-Fi connectivity + Flask web server + MJPEG camera stream lifecycle.
+
+    Supports two modes:
+    - ``'hotspot'``: Pi creates the Dogmobile AP (original behaviour).
+    - ``'joined'``: Pi connects to an existing Wi-Fi network.
+
+    ``smart_connect()`` automatically picks the best mode based on saved networks.
+    """
 
     def __init__(self, send_camera_fn, send_fan_fn, camera_paths=None,
                  stop_display_fn=None, resume_display_fn=None,
@@ -301,6 +620,8 @@ class RemoteServer:
         self.port = port
 
         self._running = False
+        self._mode = None               # 'hotspot' | 'joined' | None
+        self._active_network_name = None  # e.g. 'Dogmobile' | 'Home' | None
         self._streaming_active = threading.Event()
         self._current_jpeg = None
         self._jpeg_lock = threading.Lock()
@@ -308,9 +629,23 @@ class RemoteServer:
         self._server_thread = None
         self._app = None
 
+    # ---- Properties ----
+
     @property
     def is_running(self):
         return self._running
+
+    @property
+    def mode(self):
+        """Current connection mode: ``'hotspot'``, ``'joined'``, or ``None``."""
+        return self._mode
+
+    @property
+    def active_network_name(self):
+        """Human-readable name of the active network, or ``None`` when inactive."""
+        return self._active_network_name
+
+    # ---- Display state ----
 
     def get_display_state(self):
         """Return current display state dict: {'mode': ..., 'cam_keys': ...}."""
@@ -320,6 +655,29 @@ class RemoteServer:
         """Return the latest JPEG bytes, or None if not available."""
         with self._jpeg_lock:
             return self._current_jpeg
+
+    # ---- Internal helpers ----
+
+    def _start_server_components(self):
+        """Start the background camera worker and the Flask daemon thread."""
+        self._streaming_active.set()
+        self._stream_thread = threading.Thread(
+            target=self._camera_worker, daemon=True, name="MJPEGCameraWorker"
+        )
+        self._stream_thread.start()
+
+        self._app = create_web_app(self)
+        self._server_thread = threading.Thread(
+            target=lambda: self._app.run(
+                host='0.0.0.0',
+                port=self.port,
+                use_reloader=False,
+                threaded=True
+            ),
+            daemon=True,
+            name="FlaskServer"
+        )
+        self._server_thread.start()
 
     def _camera_worker(self):
         """Background thread: reads camera frames, encodes to JPEG, stores in buffer."""
@@ -406,49 +764,109 @@ class RemoteServer:
         ret, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY])
         return buf.tobytes() if ret else None
 
-    def start(self):
-        """Start the hotspot, camera stream worker, and Flask web server."""
+    # ---- Public API ----
+
+    def start_hotspot_mode(self):
+        """Start the Dogmobile hotspot, camera stream, and Flask web server."""
         if self._running:
             return True
-
         if not start_hotspot():
             return False
-
-        # Start background camera reader
-        self._streaming_active.set()
-        self._stream_thread = threading.Thread(
-            target=self._camera_worker, daemon=True, name="MJPEGCameraWorker"
-        )
-        self._stream_thread.start()
-
-        # Start Flask server
-        self._app = create_web_app(self)
-        self._server_thread = threading.Thread(
-            target=lambda: self._app.run(
-                host='0.0.0.0',
-                port=self.port,
-                use_reloader=False,
-                threaded=True
-            ),
-            daemon=True,
-            name="FlaskServer"
-        )
-        self._server_thread.start()
-
+        self._start_server_components()
+        self._mode = 'hotspot'
+        self._active_network_name = 'Dogmobile'
         self._running = True
-        print(f"🌐 Web UI available at http://{HOTSPOT_GATEWAY_IP}:{self.port}")
+        print(f"🔥 Dogmobile hotspot active — http://{HOTSPOT_GATEWAY_IP}:{self.port}")
         return True
 
+    def start_joined_mode(self, ssid, password, name=None):
+        """Join an existing Wi-Fi network, then start the camera stream and Flask server."""
+        if self._running:
+            return True
+        if not join_network(ssid, password):
+            return False
+        self._start_server_components()
+        self._mode = 'joined'
+        self._active_network_name = name or ssid
+        self._running = True
+        ip = get_current_ip()
+        print(f"🌐 Connected to '{self._active_network_name}' — "
+              f"http://{ip or 'dogmobile.local'}:{self.port}")
+        return True
+
+    def smart_connect(self, on_status=None):
+        """Scan for saved networks and connect to the strongest one, or fall back to hotspot.
+
+        ``on_status`` is an optional ``callable(str)`` for UI status messages.
+        Returns ``(success: bool, mode: str|None, network_name: str|None)``.
+        """
+        if self._running:
+            return True, self._mode, self._active_network_name
+
+        if on_status:
+            on_status("🔍 Scanning…")
+
+        available = get_available_known_networks()
+        if available:
+            best = available[0]
+            display_name = best.get('name') or best['ssid']
+            if on_status:
+                on_status(f"📶 Connecting to {display_name}…")
+            if self.start_joined_mode(best['ssid'], best.get('password', ''), best.get('name')):
+                return True, 'joined', self._active_network_name
+
+        # Fall back to hotspot
+        if on_status:
+            on_status("📡 Starting hotspot…")
+        if self.start_hotspot_mode():
+            return True, 'hotspot', 'Dogmobile'
+
+        return False, None, None
+
+    def switch_to_joined(self, ssid, password, name=None):
+        """Transition from hotspot mode to a joined network (captive portal callback).
+
+        Stops the hotspot but keeps the Flask server running (bound to 0.0.0.0),
+        then connects to the new network so clients can reach it via mDNS.
+        """
+        # Drop the hotspot interface; Flask keeps listening on 0.0.0.0
+        stop_hotspot()
+        time.sleep(NETWORK_TRANSITION_DELAY)  # Allow OS to tear down interface
+
+        if join_network(ssid, password):
+            self._mode = 'joined'
+            self._active_network_name = name or ssid
+            ip = get_current_ip()
+            print(f"🌐 Switched to '{self._active_network_name}' — "
+                  f"http://{ip or 'dogmobile.local'}:{self.port}")
+            return True
+
+        # Joining failed — restart the hotspot so the Pi is still reachable
+        print("❌ Failed to join network — restarting hotspot")
+        start_hotspot()
+        self._mode = 'hotspot'
+        self._active_network_name = 'Dogmobile'
+        return False
+
+    def start(self):
+        """Start the Dogmobile hotspot (backward-compatible alias for start_hotspot_mode)."""
+        return self.start_hotspot_mode()
+
     def stop(self):
-        """Stop the MJPEG stream and hotspot (Flask daemon thread dies naturally)."""
+        """Stop the MJPEG stream and disconnect from the current network mode."""
         if not self._running:
             return
 
         self._streaming_active.clear()
-        # Wait briefly for camera worker to release cameras
         if self._stream_thread and self._stream_thread.is_alive():
             self._stream_thread.join(timeout=STREAM_THREAD_SHUTDOWN_TIMEOUT)
 
-        stop_hotspot()
+        if self._mode == 'hotspot':
+            stop_hotspot()
+        elif self._mode == 'joined':
+            disconnect_network()
+
+        self._mode = None
+        self._active_network_name = None
         self._running = False
         print("🛑 Remote server stopped")

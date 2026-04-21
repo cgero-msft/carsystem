@@ -462,12 +462,12 @@ def switch_mode(mode, cam_keys=None):
 
 
 def show_hotspot_message():
-    """Show a message on the Pi display indicating cameras are unavailable."""
+    """Show a message on the Pi display indicating cameras are accessible via web."""
     window_name = 'Camera View'
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     background = np.zeros((SCREEN_HEIGHT, SCREEN_WIDTH, 3), dtype=np.uint8)
-    text = "Camera not available when system is in hotspot mode"
+    text = "Camera accessible via web interface"
     font = cv2.FONT_HERSHEY_SIMPLEX
     text_size = cv2.getTextSize(text, font, 0.7, 2)[0]
     text_x = (SCREEN_WIDTH - text_size[0]) // 2
