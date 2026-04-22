@@ -49,6 +49,33 @@ def _ensure_hostname():
 
 _ensure_hostname()
 
+# NetworkManager's shared-mode hotspot runs its own dnsmasq instance.
+# Drop a config snippet so that dnsmasq resolves dogmobile.local → gateway IP
+# for ALL clients (iOS, Android, PC — no mDNS/avahi dependency).
+_DNSMASQ_SHARED_DIR = "/etc/NetworkManager/dnsmasq-shared.d"
+_DNSMASQ_CONF_FILE = f"{_DNSMASQ_SHARED_DIR}/dogmobile.conf"
+_DNSMASQ_CONF_CONTENT = f"address=/dogmobile.local/{HOTSPOT_GATEWAY_IP}\n"
+
+
+def _ensure_dnsmasq_conf():
+    """Write the dnsmasq snippet once so hotspot clients can resolve dogmobile.local."""
+    try:
+        subprocess.run(["sudo", "mkdir", "-p", _DNSMASQ_SHARED_DIR],
+                       capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["sudo", "cat", _DNSMASQ_CONF_FILE],
+                                capture_output=True, text=True, timeout=5)
+        if result.stdout.strip() == _DNSMASQ_CONF_CONTENT.strip():
+            return  # Already correct
+        subprocess.run(
+            ["sudo", "bash", "-c", f"echo '{_DNSMASQ_CONF_CONTENT.strip()}' > {_DNSMASQ_CONF_FILE}"],
+            capture_output=True, text=True, timeout=5, check=True
+        )
+        print(f"✅ dnsmasq config written: dogmobile.local → {HOTSPOT_GATEWAY_IP}")
+    except Exception as e:
+        print(f"⚠️ Could not write dnsmasq config: {e}")
+
+_ensure_dnsmasq_conf()
+
 
 def start_hotspot():
     """Turn the Pi into a Wi-Fi hotspot using NetworkManager."""
