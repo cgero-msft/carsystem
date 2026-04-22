@@ -165,10 +165,6 @@ def get_available_known_networks():
     if not saved:
         return []
     available = scan_wifi()
-    if not available:
-        # Primary interface may be unavailable — try the fallback radio
-        print("⚠️ Primary scan empty, retrying on fallback interface")
-        available = scan_wifi(interface=SCAN_FALLBACK_INTERFACE)
     matches = []
     for net in available:
         if net['ssid'] in saved:
