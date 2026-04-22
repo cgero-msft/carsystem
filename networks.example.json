@@ -1,0 +1,22 @@
+{
+  "saved_networks": [
+    {
+      "name": "Home",
+      "icon": "🏠",
+      "ssid": "YourHomeNetwork",
+      "password": "yourpassword"
+    },
+    {
+      "name": "Starbucks",
+      "icon": "☕",
+      "ssid": "Google Starbucks",
+      "password": ""
+    },
+    {
+      "name": "Office",
+      "icon": "🏢",
+      "ssid": "CorpWiFi-Guest",
+      "password": "guest2024"
+    }
+  ]
+}

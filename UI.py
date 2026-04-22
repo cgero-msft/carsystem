@@ -6,7 +6,7 @@ import cv2, numpy as np
 from board import SCL, SDA
 import busio
 from adafruit_pca9685 import PCA9685
-from hotspot import RemoteServer
+from hotspot import RemoteServer, load_saved_networks
 
 # --- Your existing camera & fan code remains unchanged ---
 # (Copy your entire background code: show_single, show_multiview, switch_mode, on_press, on_release, main)
@@ -353,6 +353,9 @@ class UIOverlay(threading.Thread):
         self.resume_display_fn = resume_display_fn
         self.show_hotspot_msg_fn = show_hotspot_msg_fn
         self.hotspot_btn = None
+        self._long_press_job = None  # Timer for long-press detection
+        # Duration (ms) a button must be held to trigger the long-press menu.
+        self._LONG_PRESS_MS = 800
 
         # Track current fan states (initially all Off)
         self.fan_states = {
@@ -420,21 +423,35 @@ class UIOverlay(threading.Thread):
         self.root.configure(bg='#333333')
         self.root.attributes('-alpha', 0.7)
         
-        # Equal width buttons
+        # Network button pinned to the right — pack first so Camera/Fan claim remaining space
+        self.hotspot_btn = tk.Button(
+            self.root,
+            text="📡 Network",
+            bg="#555555",
+            fg="white",
+            activebackground="#555555",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+            width=10
+        )
+        self.hotspot_btn.bind("<ButtonPress-1>", self._on_network_btn_press)
+        self.hotspot_btn.bind("<ButtonRelease-1>", self._on_network_btn_release)
+        self.hotspot_btn.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
+
+        # Camera and Fan buttons split the remaining center space equally
         button_width = 8
-        
+
         # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
             self.root, 
             text="Camera",
             bg="#0078D7",
             fg="white",
-            activebackground="#0078D7",  # Same as bg
-            activeforeground="white",    # Same as fg
+            activebackground="#0078D7",
+            activeforeground="white",
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        # Bind click event directly
         camera_btn.config(command=self.show_camera_menu)
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
@@ -444,28 +461,13 @@ class UIOverlay(threading.Thread):
             text="Fan",
             bg="#0078D7", 
             fg="white",
-            activebackground="#0078D7",  # Same as bg
-            activeforeground="white",    # Same as fg
-            font=("Arial", 12, "bold"),
-            width=button_width
-        )
-        # Bind click event directly
-        fan_btn.config(command=self.show_fan_menu)
-        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Hotspot button — toggles Wi-Fi hotspot + mobile web UI
-        self.hotspot_btn = tk.Button(
-            self.root,
-            text="📡 Hotspot",
-            bg="#555555",
-            fg="white",
-            activebackground="#555555",
+            activebackground="#0078D7",
             activeforeground="white",
             font=("Arial", 12, "bold"),
             width=button_width
         )
-        self.hotspot_btn.config(command=self.toggle_hotspot)
-        self.hotspot_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        fan_btn.config(command=self.show_fan_menu)
+        fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
@@ -579,40 +581,199 @@ class UIOverlay(threading.Thread):
             )
 
 
-    def toggle_hotspot(self):
-        """Toggle the Wi-Fi hotspot and mobile web remote on/off."""
+    def _on_network_btn_press(self, event):
+        """Start a timer to detect long-press on the Network button."""
+        self._long_press_job = self.root.after(self._LONG_PRESS_MS, self._long_press_network)
+
+    def _on_network_btn_release(self, event):
+        """On release: cancel timer (long press) or execute short tap (smart connect)."""
+        if self._long_press_job is not None:
+            self.root.after_cancel(self._long_press_job)
+            self._long_press_job = None
+            # Short tap — run smart connect in background thread
+            threading.Thread(target=self.handle_network_tap, daemon=True).start()
+        # else: long-press already fired, do nothing
+
+    def _long_press_network(self):
+        """Long-press handler: open the manual network management menu."""
+        self._long_press_job = None
+        self.show_network_menu()
+
+    def handle_network_tap(self):
+        """Smart connect on tap: scan → join known network → or fall back to hotspot.
+        If already connected, disconnect instead.
+        """
         if self.remote_server.is_running:
-            # Stop remote server first, then resume local display
+            # Already active — disconnect and restore local display
             self.remote_server.stop()
             if self.resume_display_fn:
                 self.resume_display_fn()
-            if self.hotspot_btn:
-                self.hotspot_btn.config(
-                    bg="#555555",
-                    activebackground="#555555",
-                    text="📡 Hotspot"
-                )
-            print("Hotspot OFF — local display resumed")
-        else:
-            # Stop local display, show hotspot message, then start remote server
-            if self.stop_display_fn:
-                self.stop_display_fn()
-            if self.show_hotspot_msg_fn:
-                self.show_hotspot_msg_fn()
-            success = self.remote_server.start()
+            self._update_network_button("off")
+            print("📡 Disconnected — local display resumed")
+            return
+
+        # Not active — stop local display first, then smart-connect
+        if self.stop_display_fn:
+            self.stop_display_fn()
+        if self.show_hotspot_msg_fn:
+            self.show_hotspot_msg_fn()
+        self._update_network_button("scanning")
+
+        def _do_smart_connect():
+            def on_status(msg):
+                self._update_network_button("scanning", msg)
+
+            success, mode, name = self.remote_server.smart_connect(on_status=on_status)
             if success:
-                if self.hotspot_btn:
-                    self.hotspot_btn.config(
-                        bg="#00C853",
-                        activebackground="#00C853",
-                        text="📡 ON"
-                    )
-                print(f"Hotspot ON — Connect to 'Dogmobile' Wi-Fi, open http://10.42.0.1:{self.remote_server.port}")
+                self._update_network_button(mode, name)
             else:
-                # Failed to start hotspot — restore local display
+                # Failed completely — restore local display
                 if self.resume_display_fn:
                     self.resume_display_fn()
-                print("❌ Failed to start hotspot")
+                self._update_network_button("off")
+                print("❌ Smart connect failed — local display resumed")
+
+        threading.Thread(target=_do_smart_connect, daemon=True).start()
+
+    def show_network_menu(self):
+        """Long-press: open the manual network management menu."""
+        buttons = []
+
+        # List all saved networks (no scan — instant display)
+        for net in load_saved_networks():
+            label = f"{net.get('icon', '📶')} {net['name']}"
+            ssid = net['ssid']
+            password = net.get('password', '')
+            name = net.get('name', ssid)
+            buttons.append((
+                label,
+                lambda s=ssid, p=password, n=name: threading.Thread(
+                    target=self._manual_connect, args=(s, p, n), daemon=True
+                ).start()
+            ))
+
+        # Dogmobile hotspot option
+        buttons.append(("🔥 Dogmobile", lambda: threading.Thread(
+            target=self._activate_hotspot, daemon=True
+        ).start()))
+
+        # Add Network (captive portal)
+        buttons.append(("➕ Add Network", self._start_add_network_flow))
+
+        # Disconnect (only shown when active)
+        if self.remote_server.is_running:
+            buttons.append(("❌ Disconnect", lambda: threading.Thread(
+                target=self._disconnect_network, daemon=True
+            ).start()))
+
+        OverlayMenu(self.root, buttons, title="📡 Network")
+
+    def _update_network_button(self, mode, name=None):
+        """Update the Network button appearance. Thread-safe (uses root.after)."""
+        def _apply():
+            if not self.hotspot_btn:
+                return
+            if mode == "hotspot":
+                self.hotspot_btn.config(
+                    bg="#00C853", activebackground="#00C853", text="🔥 Dogmobile"
+                )
+            elif mode == "joined":
+                display = name or "Network"
+                self.hotspot_btn.config(
+                    bg="#0078D7", activebackground="#0078D7", text=f"🌐 {display}"
+                )
+            elif mode == "scanning":
+                label = name or "🔍 Scanning…"
+                self.hotspot_btn.config(
+                    bg="#FF8C00", activebackground="#FF8C00", text=label
+                )
+            else:  # "off" / disconnected
+                self.hotspot_btn.config(
+                    bg="#555555", activebackground="#555555", text="📡 Network"
+                )
+        if self.root:
+            self.root.after(0, _apply)
+
+    def _manual_connect(self, ssid, password, name):
+        """Manually connect to a specific saved network (called from network menu)."""
+        if self.remote_server.is_running:
+            self.remote_server.stop()
+            # Don't resume local display — we're about to start a new network session
+
+        self._update_network_button("scanning", f"📶 {name}…")
+        if self.stop_display_fn:
+            self.stop_display_fn()
+        if self.show_hotspot_msg_fn:
+            self.show_hotspot_msg_fn()
+
+        success = self.remote_server.start_joined_mode(ssid, password, name)
+        if success:
+            self._update_network_button("joined", name)
+        else:
+            if self.resume_display_fn:
+                self.resume_display_fn()
+            self._update_network_button("off")
+            print(f"❌ Failed to connect to '{name}'")
+
+    def _activate_hotspot(self):
+        """Start the Dogmobile hotspot (called from network menu)."""
+        if self.remote_server.is_running:
+            self.remote_server.stop()
+            # Don't resume local display — we're about to start hotspot mode
+
+        self._update_network_button("scanning", "📡 Starting…")
+        if self.stop_display_fn:
+            self.stop_display_fn()
+        if self.show_hotspot_msg_fn:
+            self.show_hotspot_msg_fn()
+
+        success = self.remote_server.start_hotspot_mode()
+        if success:
+            self._update_network_button("hotspot")
+        else:
+            if self.resume_display_fn:
+                self.resume_display_fn()
+            self._update_network_button("off")
+            print("❌ Failed to start hotspot")
+
+    def _disconnect_network(self):
+        """Disconnect from the current network mode (called from network menu)."""
+        self.remote_server.stop()
+        if self.resume_display_fn:
+            self.resume_display_fn()
+        self._update_network_button("off")
+        print("📡 Disconnected — local display resumed")
+
+    def _start_add_network_flow(self):
+        """Start Dogmobile hotspot so user can visit /setup to add a new network."""
+        def _start():
+            if not self.remote_server.is_running:
+                if self.stop_display_fn:
+                    self.stop_display_fn()
+                if self.show_hotspot_msg_fn:
+                    self.show_hotspot_msg_fn()
+                success = self.remote_server.start_hotspot_mode()
+                if success:
+                    self._update_network_button("hotspot")
+                else:
+                    if self.resume_display_fn:
+                        self.resume_display_fn()
+                    self._update_network_button("off")
+                    print("❌ Failed to start hotspot for Add Network flow")
+                    return
+            elif self.remote_server.mode != 'hotspot':
+                # Already in joined mode — no need to switch; just inform the user
+                print("ℹ️  Visit http://dogmobile.local:8080/setup to add a network")
+                return
+            from hotspot import HOTSPOT_GATEWAY_IP
+            print(f"➕ Add Network: connect to 'Dogmobile' Wi-Fi, "
+                  f"then open http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup")
+
+        threading.Thread(target=_start, daemon=True).start()
+
+    def toggle_hotspot(self):
+        """Deprecated: kept for backward compatibility. Delegates to handle_network_tap."""
+        threading.Thread(target=self.handle_network_tap, daemon=True).start()
 
     def hide_main_menu(self):
         """Hide the main menu completely."""

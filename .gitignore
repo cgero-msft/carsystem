@@ -1,0 +1,11 @@
+# Wi-Fi credentials — copy networks.example.json and rename to networks.json
+networks.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+logs/
+*.log
