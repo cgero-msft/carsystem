@@ -469,7 +469,7 @@ class UIOverlay(threading.Thread):
 
         self.hotspot_btn = tk.Button(
             self.network_window,
-            text="Network",
+            text="🌐 Network",
             bg="#555555",
             fg="white",
             activebackground="#555555",
@@ -637,6 +637,20 @@ class UIOverlay(threading.Thread):
             success, mode, name = self.remote_server.smart_connect(on_status=on_status)
             if success:
                 self._update_network_button(mode, name)
+                # Show connection info on the Pi screen
+                from hotspot import CANONICAL_URL_BASE, HOTSPOT_SSID
+                url = f"{CANONICAL_URL_BASE}:{self.remote_server.port}"
+                if mode == 'hotspot':
+                    self._show_info_overlay(
+                        f"📡 Hotspot '{HOTSPOT_SSID}' active\n\n"
+                        f"Connect your phone to\n'{HOTSPOT_SSID}' Wi-Fi\n\n"
+                        f"Then open:\n{url}"
+                    )
+                else:
+                    self._show_info_overlay(
+                        f"📶 Connected to '{name}'\n\n"
+                        f"On the same network, open:\n{url}"
+                    )
             else:
                 # Failed completely — restore local display
                 if self.resume_display_fn:
@@ -798,7 +812,9 @@ class UIOverlay(threading.Thread):
     def _start_add_network_flow(self):
         """Start Dogmobile hotspot so user can visit /setup to add a new network."""
         def _start():
-            from hotspot import HOTSPOT_GATEWAY_IP
+            from hotspot import HOTSPOT_SSID, CANONICAL_URL_BASE
+
+            url = f"{CANONICAL_URL_BASE}:{self.remote_server.port}/setup"
 
             if not self.remote_server.is_running:
                 if self.stop_display_fn:
@@ -814,23 +830,19 @@ class UIOverlay(threading.Thread):
                     self._update_network_button("off")
                     print("Failed to start hotspot for Add Network flow")
                     return
-                url = f"http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup"
                 self._show_info_overlay(
-                    f"Connect to 'Dogmobile' Wi-Fi\n"
+                    f"Connect to '{HOTSPOT_SSID}' Wi-Fi\n"
                     f"on your phone, then open:\n\n{url}"
                 )
-                print(f"Add Network: connect to 'Dogmobile' Wi-Fi, then open {url}")
+                print(f"Add Network: connect to '{HOTSPOT_SSID}' Wi-Fi, then open {url}")
             elif self.remote_server.mode == 'hotspot':
-                # Already in hotspot mode — show the URL reminder
-                url = f"http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup"
                 self._show_info_overlay(
-                    f"Connect to 'Dogmobile' Wi-Fi\n"
+                    f"Connect to '{HOTSPOT_SSID}' Wi-Fi\n"
                     f"on your phone, then open:\n\n{url}"
                 )
-                print(f"Add Network: connect to 'Dogmobile' Wi-Fi, then open {url}")
+                print(f"Add Network: connect to '{HOTSPOT_SSID}' Wi-Fi, then open {url}")
             else:
                 # Already in joined mode — user can reach /setup directly
-                url = f"http://dogmobile.local:{self.remote_server.port}/setup"
                 self._show_info_overlay(
                     f"Open this URL on your phone:\n\n{url}"
                 )

@@ -13,6 +13,11 @@ HOTSPOT_SSID = "Dogmobile"
 HOTSPOT_PASSWORD = "RowGlowBrev"
 HOTSPOT_CON_NAME = "DogmobileHotspot"
 HOTSPOT_GATEWAY_IP = "10.42.0.1"
+# Canonical hostname used for mDNS (avahi). The Pi's hostname MUST be set
+# to this value (sudo hostnamectl set-hostname dogmobile) so that
+# <HOSTNAME>.local resolves regardless of hotspot vs. joined mode.
+HOSTNAME = "dogmobile"
+CANONICAL_URL_BASE = f"http://{HOSTNAME}.local"
 
 STREAM_JPEG_QUALITY = 65
 STREAM_THREAD_SHUTDOWN_TIMEOUT = 3
@@ -27,6 +32,22 @@ SCAN_FALLBACK_INTERFACE = "wlan0"
 # Brief pause (seconds) between stopping one network mode and starting another.
 # Allows the OS to fully tear down the previous interface before reconnecting.
 NETWORK_TRANSITION_DELAY = 1
+
+
+def _ensure_hostname():
+    """Set the Pi's hostname to HOSTNAME so that mDNS (<hostname>.local) works
+    in both hotspot and joined modes. Runs once at import time."""
+    try:
+        result = subprocess.run(["hostname"], capture_output=True, text=True, timeout=5)
+        current = result.stdout.strip()
+        if current != HOSTNAME:
+            subprocess.run(["sudo", "hostnamectl", "set-hostname", HOSTNAME],
+                           capture_output=True, text=True, timeout=10)
+            print(f"🖥️  Hostname set to '{HOSTNAME}' (was '{current}')")
+    except Exception as e:
+        print(f"⚠️ Could not set hostname: {e}")
+
+_ensure_hostname()
 
 
 def start_hotspot():
@@ -801,7 +822,7 @@ class RemoteServer:
         self._mode = 'hotspot'
         self._active_network_name = 'Dogmobile'
         self._running = True
-        print(f"🔥 Dogmobile hotspot active — http://{HOTSPOT_GATEWAY_IP}:{self.port}")
+        print(f"🔥 Dogmobile hotspot active — {CANONICAL_URL_BASE}:{self.port}")
         return True
 
     def start_joined_mode(self, ssid, password, name=None):
@@ -816,7 +837,7 @@ class RemoteServer:
         self._running = True
         ip = get_current_ip()
         print(f"🌐 Connected to '{self._active_network_name}' — "
-              f"http://{ip or 'dogmobile.local'}:{self.port}")
+              f"{CANONICAL_URL_BASE}:{self.port}")
         return True
 
     def smart_connect(self, on_status=None):
@@ -863,7 +884,7 @@ class RemoteServer:
             self._active_network_name = name or ssid
             ip = get_current_ip()
             print(f"🌐 Switched to '{self._active_network_name}' — "
-                  f"http://{ip or 'dogmobile.local'}:{self.port}")
+                  f"{CANONICAL_URL_BASE}:{self.port}")
             return True
 
         # Joining failed — restart the hotspot so the Pi is still reachable
