@@ -638,18 +638,22 @@ class UIOverlay(threading.Thread):
             if success:
                 self._update_network_button(mode, name)
                 # Show connection info on the Pi screen
-                from hotspot import CANONICAL_URL_BASE, HOTSPOT_SSID
-                url = f"{CANONICAL_URL_BASE}:{self.remote_server.port}"
+                from hotspot import CANONICAL_URL_BASE, HOTSPOT_SSID, HOTSPOT_GATEWAY_IP, get_current_ip
+                port = self.remote_server.port
                 if mode == 'hotspot':
+                    ip_url = f"http://{HOTSPOT_GATEWAY_IP}:{port}"
                     self._show_info_overlay(
                         f"📡 Hotspot '{HOTSPOT_SSID}' active\n\n"
                         f"Connect your phone to\n'{HOTSPOT_SSID}' Wi-Fi\n\n"
-                        f"Then open:\n{url}"
+                        f"Then open:\n{ip_url}"
                     )
                 else:
+                    ip = get_current_ip()
+                    mdns_url = f"{CANONICAL_URL_BASE}:{port}"
+                    ip_line = f"\n(or http://{ip}:{port})" if ip else ""
                     self._show_info_overlay(
                         f"📶 Connected to '{name}'\n\n"
-                        f"On the same network, open:\n{url}"
+                        f"On the same network, open:\n{mdns_url}{ip_line}"
                     )
             else:
                 # Failed completely — restore local display
@@ -812,9 +816,9 @@ class UIOverlay(threading.Thread):
     def _start_add_network_flow(self):
         """Start Dogmobile hotspot so user can visit /setup to add a new network."""
         def _start():
-            from hotspot import HOTSPOT_SSID, CANONICAL_URL_BASE
+            from hotspot import HOTSPOT_SSID, HOTSPOT_GATEWAY_IP, CANONICAL_URL_BASE, get_current_ip
 
-            url = f"{CANONICAL_URL_BASE}:{self.remote_server.port}/setup"
+            port = self.remote_server.port
 
             if not self.remote_server.is_running:
                 if self.stop_display_fn:
@@ -830,21 +834,26 @@ class UIOverlay(threading.Thread):
                     self._update_network_button("off")
                     print("Failed to start hotspot for Add Network flow")
                     return
+                url = f"http://{HOTSPOT_GATEWAY_IP}:{port}/setup"
                 self._show_info_overlay(
                     f"Connect to '{HOTSPOT_SSID}' Wi-Fi\n"
                     f"on your phone, then open:\n\n{url}"
                 )
                 print(f"Add Network: connect to '{HOTSPOT_SSID}' Wi-Fi, then open {url}")
             elif self.remote_server.mode == 'hotspot':
+                url = f"http://{HOTSPOT_GATEWAY_IP}:{port}/setup"
                 self._show_info_overlay(
                     f"Connect to '{HOTSPOT_SSID}' Wi-Fi\n"
                     f"on your phone, then open:\n\n{url}"
                 )
                 print(f"Add Network: connect to '{HOTSPOT_SSID}' Wi-Fi, then open {url}")
             else:
-                # Already in joined mode — user can reach /setup directly
+                # Already in joined mode — mDNS works here
+                url = f"{CANONICAL_URL_BASE}:{port}/setup"
+                ip = get_current_ip()
+                ip_line = f"\n(or http://{ip}:{port}/setup)" if ip else ""
                 self._show_info_overlay(
-                    f"Open this URL on your phone:\n\n{url}"
+                    f"Open this URL on your phone:\n\n{url}{ip_line}"
                 )
                 print(f"Visit {url} to add a network")
 
