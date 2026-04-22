@@ -20,7 +20,8 @@ STREAM_THREAD_SHUTDOWN_TIMEOUT = 3
 # ---- Network Configuration ----
 
 NETWORKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "networks.json")
-WIFI_INTERFACE = "wlan0"
+WIFI_INTERFACE = "wlan1"
+AP_INTERFACE = "wlan0"
 # Brief pause (seconds) between stopping one network mode and starting another.
 # Allows the OS to fully tear down the previous interface before reconnecting.
 NETWORK_TRANSITION_DELAY = 1
@@ -37,7 +38,7 @@ def start_hotspot():
         # Create a new hotspot
         subprocess.run([
             "sudo", "nmcli", "device", "wifi", "hotspot",
-            "ifname", "wlan0",
+            "ifname", AP_INTERFACE,
             "con-name", HOTSPOT_CON_NAME,
             "ssid", HOTSPOT_SSID,
             "password", HOTSPOT_PASSWORD
