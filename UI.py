@@ -755,9 +755,51 @@ class UIOverlay(threading.Thread):
         self._update_network_button("off")
         print("Disconnected -- local display resumed")
 
+    def _show_info_overlay(self, message):
+        """Show a dismissable info overlay on the touchscreen. Thread-safe."""
+        def _create():
+            overlay = tk.Toplevel(self.root)
+            overlay.attributes('-fullscreen', True)
+            overlay.attributes('-alpha', 0.85)
+            overlay.attributes('-topmost', True)
+            overlay.configure(bg='#222222')
+
+            frame = tk.Frame(overlay, bg='#222222')
+            frame.place(relx=0.5, rely=0.5, anchor='center')
+
+            lbl = tk.Label(
+                frame,
+                text=message,
+                font=("Arial", 12, "bold"),
+                bg="#222222",
+                fg="white",
+                wraplength=400,
+                justify="center",
+            )
+            lbl.pack(pady=20, padx=20)
+
+            close_btn = tk.Button(
+                frame,
+                text="OK",
+                font=("Arial", 12, "bold"),
+                width=12,
+                height=2,
+                bg="#0078D7",
+                fg="white",
+                activebackground="#0078D7",
+                activeforeground="white",
+                command=overlay.destroy,
+            )
+            close_btn.pack(pady=10)
+
+        if self.root:
+            self.root.after(0, _create)
+
     def _start_add_network_flow(self):
         """Start Dogmobile hotspot so user can visit /setup to add a new network."""
         def _start():
+            from hotspot import HOTSPOT_GATEWAY_IP
+
             if not self.remote_server.is_running:
                 if self.stop_display_fn:
                     self.stop_display_fn()
@@ -772,13 +814,27 @@ class UIOverlay(threading.Thread):
                     self._update_network_button("off")
                     print("Failed to start hotspot for Add Network flow")
                     return
-            elif self.remote_server.mode != 'hotspot':
-                # Already in joined mode — no need to switch; just inform the user
-                print("Visit http://dogmobile.local:8080/setup to add a network")
-                return
-            from hotspot import HOTSPOT_GATEWAY_IP
-            print(f"Add Network: connect to 'Dogmobile' Wi-Fi, "
-                  f"then open http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup")
+                url = f"http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup"
+                self._show_info_overlay(
+                    f"Connect to 'Dogmobile' Wi-Fi\n"
+                    f"on your phone, then open:\n\n{url}"
+                )
+                print(f"Add Network: connect to 'Dogmobile' Wi-Fi, then open {url}")
+            elif self.remote_server.mode == 'hotspot':
+                # Already in hotspot mode — show the URL reminder
+                url = f"http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup"
+                self._show_info_overlay(
+                    f"Connect to 'Dogmobile' Wi-Fi\n"
+                    f"on your phone, then open:\n\n{url}"
+                )
+                print(f"Add Network: connect to 'Dogmobile' Wi-Fi, then open {url}")
+            else:
+                # Already in joined mode — user can reach /setup directly
+                url = f"http://dogmobile.local:{self.remote_server.port}/setup"
+                self._show_info_overlay(
+                    f"Open this URL on your phone:\n\n{url}"
+                )
+                print(f"Visit {url} to add a network")
 
         threading.Thread(target=_start, daemon=True).start()
 
