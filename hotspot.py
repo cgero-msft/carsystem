@@ -120,6 +120,14 @@ def scan_wifi(interface=None):
     """
     iface = interface or WIFI_INTERFACE
     try:
+        # Trigger a fresh scan — the list command only returns cached results,
+        # which may be empty on a cold or recently-transitioned interface.
+        subprocess.run(
+            ["sudo", "nmcli", "device", "wifi", "rescan", "ifname", iface],
+            capture_output=True, text=True, timeout=10
+        )
+        # Brief pause to let the radio collect results
+        time.sleep(2)
         result = subprocess.run(
             ["nmcli", "--terse", "--fields", "SSID,SIGNAL,SECURITY",
              "device", "wifi", "list", "ifname", iface],
@@ -157,6 +165,10 @@ def get_available_known_networks():
     if not saved:
         return []
     available = scan_wifi()
+    if not available:
+        # Primary interface may be unavailable — try the fallback radio
+        print("⚠️ Primary scan empty, retrying on fallback interface")
+        available = scan_wifi(interface=SCAN_FALLBACK_INTERFACE)
     matches = []
     for net in available:
         if net['ssid'] in saved:
