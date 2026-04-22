@@ -290,12 +290,18 @@ SETUP_HTML = """
                     list.innerHTML = '<div class="loading">No networks found. <a href="#" onclick="scanNetworks()">Retry</a></div>';
                     return;
                 }
-                list.innerHTML = data.networks.map(n =>
-                    `<div class="network-item" onclick="selectNetwork(this, ${JSON.stringify(n.ssid)})">
-                        <span>${n.ssid}</span>
-                        <span class="signal">📶 ${n.signal}%</span>
-                    </div>`
-                ).join('');
+                list.innerHTML = data.networks.map((n, i) => {
+                    const div = document.createElement('div');
+                    div.className = 'network-item';
+                    div.dataset.ssid = n.ssid;
+                    div.onclick = function() { selectNetwork(this, n.ssid); };
+                    div.innerHTML = `<span>${n.ssid}</span><span class="signal">📶 ${n.signal}%</span>`;
+                    return div.outerHTML;
+                }).join('');
+                // Re-attach click handlers (outerHTML loses them)
+                document.querySelectorAll('.network-item[data-ssid]').forEach(el => {
+                    el.onclick = function() { selectNetwork(this, this.dataset.ssid); };
+                });
             } catch(e) {
                 document.getElementById('networks-list').innerHTML =
                     '<div class="loading">Scan failed. <a href="#" onclick="scanNetworks()">Retry</a></div>';
