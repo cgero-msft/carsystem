@@ -20,8 +20,10 @@ STREAM_THREAD_SHUTDOWN_TIMEOUT = 3
 # ---- Network Configuration ----
 
 NETWORKS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "networks.json")
+# Primary interface (USB Wi-Fi adapter) — used for scanning, joining, AND hosting the AP.
 WIFI_INTERFACE = "wlan1"
-AP_INTERFACE = "wlan0"
+# Secondary interface (built-in Wi-Fi) — used for scanning while the AP is active on wlan1.
+SCAN_FALLBACK_INTERFACE = "wlan0"
 # Brief pause (seconds) between stopping one network mode and starting another.
 # Allows the OS to fully tear down the previous interface before reconnecting.
 NETWORK_TRANSITION_DELAY = 1
@@ -38,7 +40,7 @@ def start_hotspot():
         # Create a new hotspot
         subprocess.run([
             "sudo", "nmcli", "device", "wifi", "hotspot",
-            "ifname", AP_INTERFACE,
+            "ifname", WIFI_INTERFACE,
             "con-name", HOTSPOT_CON_NAME,
             "ssid", HOTSPOT_SSID,
             "password", HOTSPOT_PASSWORD
@@ -110,12 +112,17 @@ def save_network(name, ssid, password, icon="📶"):
         return False
 
 
-def scan_wifi():
-    """Scan for available Wi-Fi networks via nmcli. Returns list sorted by signal strength."""
+def scan_wifi(interface=None):
+    """Scan for available Wi-Fi networks via nmcli. Returns list sorted by signal strength.
+
+    ``interface`` defaults to WIFI_INTERFACE (wlan1). Pass SCAN_FALLBACK_INTERFACE
+    when the primary interface is busy hosting the hotspot AP.
+    """
+    iface = interface or WIFI_INTERFACE
     try:
         result = subprocess.run(
             ["nmcli", "--terse", "--fields", "SSID,SIGNAL,SECURITY",
-             "device", "wifi", "list", "ifname", WIFI_INTERFACE],
+             "device", "wifi", "list", "ifname", iface],
             capture_output=True, text=True, timeout=15
         )
         networks = []
@@ -545,7 +552,10 @@ def create_web_app(remote_server):
 
     @app.route('/api/scan_networks')
     def api_scan_networks():
-        networks = scan_wifi()
+        # When the hotspot AP is running on WIFI_INTERFACE, scan on the
+        # fallback (built-in) radio so results aren't blocked by AP mode.
+        iface = SCAN_FALLBACK_INTERFACE if remote_server.mode == 'hotspot' else None
+        networks = scan_wifi(interface=iface)
         return jsonify({'networks': networks})
 
     @app.route('/setup/connect', methods=['POST'])
