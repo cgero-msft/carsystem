@@ -410,8 +410,8 @@ class UIOverlay(threading.Thread):
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         
-        # Panel dimensions — widened to accommodate 3 buttons
-        panel_width = 450
+        # Panel dimensions — Camera and Fan only
+        panel_width = 300
         panel_height = 60
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -423,25 +423,9 @@ class UIOverlay(threading.Thread):
         self.root.configure(bg='#333333')
         self.root.attributes('-alpha', 0.7)
         
-        # Network button pinned to the right — pack first so Camera/Fan claim remaining space
-        self.hotspot_btn = tk.Button(
-            self.root,
-            text="📡 Network",
-            bg="#555555",
-            fg="white",
-            activebackground="#555555",
-            activeforeground="white",
-            font=("Arial", 12, "bold"),
-            width=10
-        )
-        self.hotspot_btn.bind("<ButtonPress-1>", self._on_network_btn_press)
-        self.hotspot_btn.bind("<ButtonRelease-1>", self._on_network_btn_release)
-        self.hotspot_btn.pack(side=tk.RIGHT, fill=tk.Y, padx=5, pady=5)
-
-        # Camera and Fan buttons split the remaining center space equally
+        # Camera and Fan buttons split the center toolbar equally
         button_width = 8
 
-        # SIMPLIFIED: Direct command binding without the wrapper
         camera_btn = tk.Button(
             self.root, 
             text="Camera",
@@ -455,7 +439,6 @@ class UIOverlay(threading.Thread):
         camera_btn.config(command=self.show_camera_menu)
         camera_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Fan button (same direct binding)
         fan_btn = tk.Button(
             self.root, 
             text="Fan",
@@ -468,6 +451,34 @@ class UIOverlay(threading.Thread):
         )
         fan_btn.config(command=self.show_fan_menu)
         fan_btn.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Standalone Network button — absolute bottom-right corner of the screen
+        self.network_window = tk.Toplevel(self.root)
+        self.network_window.overrideredirect(True)
+        self.network_window.attributes('-topmost', True)
+        self.network_window.configure(bg='#333333')
+        self.network_window.attributes('-alpha', 0.7)
+
+        net_btn_width = 120
+        net_btn_height = 60
+        self.network_window.geometry(
+            f"{net_btn_width}x{net_btn_height}"
+            f"+{screen_width - net_btn_width - 10}"
+            f"+{screen_height - net_btn_height - 10}"
+        )
+
+        self.hotspot_btn = tk.Button(
+            self.network_window,
+            text="Network",
+            bg="#555555",
+            fg="white",
+            activebackground="#555555",
+            activeforeground="white",
+            font=("Arial", 12, "bold"),
+        )
+        self.hotspot_btn.bind("<ButtonPress-1>", self._on_network_btn_press)
+        self.hotspot_btn.bind("<ButtonRelease-1>", self._on_network_btn_release)
+        self.hotspot_btn.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         self.root.mainloop()
 
@@ -609,7 +620,7 @@ class UIOverlay(threading.Thread):
             if self.resume_display_fn:
                 self.resume_display_fn()
             self._update_network_button("off")
-            print("📡 Disconnected — local display resumed")
+            print("Disconnected -- local display resumed")
             return
 
         # Not active — stop local display first, then smart-connect
@@ -631,7 +642,7 @@ class UIOverlay(threading.Thread):
                 if self.resume_display_fn:
                     self.resume_display_fn()
                 self._update_network_button("off")
-                print("❌ Smart connect failed — local display resumed")
+                print("Smart connect failed -- local display resumed")
 
         threading.Thread(target=_do_smart_connect, daemon=True).start()
 
@@ -641,7 +652,7 @@ class UIOverlay(threading.Thread):
 
         # List all saved networks (no scan — instant display)
         for net in load_saved_networks():
-            label = f"{net.get('icon', '📶')} {net['name']}"
+            label = net['name']
             ssid = net['ssid']
             password = net.get('password', '')
             name = net.get('name', ssid)
@@ -653,20 +664,20 @@ class UIOverlay(threading.Thread):
             ))
 
         # Dogmobile hotspot option
-        buttons.append(("🔥 Dogmobile", lambda: threading.Thread(
+        buttons.append(("Dogmobile", lambda: threading.Thread(
             target=self._activate_hotspot, daemon=True
         ).start()))
 
         # Add Network (captive portal)
-        buttons.append(("➕ Add Network", self._start_add_network_flow))
+        buttons.append(("Add Network", self._start_add_network_flow))
 
         # Disconnect (only shown when active)
         if self.remote_server.is_running:
-            buttons.append(("❌ Disconnect", lambda: threading.Thread(
+            buttons.append(("Disconnect", lambda: threading.Thread(
                 target=self._disconnect_network, daemon=True
             ).start()))
 
-        OverlayMenu(self.root, buttons, title="📡 Network")
+        OverlayMenu(self.root, buttons, title="Network")
 
     def _update_network_button(self, mode, name=None):
         """Update the Network button appearance. Thread-safe (uses root.after)."""
@@ -675,21 +686,21 @@ class UIOverlay(threading.Thread):
                 return
             if mode == "hotspot":
                 self.hotspot_btn.config(
-                    bg="#00C853", activebackground="#00C853", text="🔥 Dogmobile"
+                    bg="#00C853", activebackground="#00C853", text="Dogmobile"
                 )
             elif mode == "joined":
                 display = name or "Network"
                 self.hotspot_btn.config(
-                    bg="#0078D7", activebackground="#0078D7", text=f"🌐 {display}"
+                    bg="#0078D7", activebackground="#0078D7", text=display
                 )
             elif mode == "scanning":
-                label = name or "🔍 Scanning…"
+                label = name or "Scanning..."
                 self.hotspot_btn.config(
                     bg="#FF8C00", activebackground="#FF8C00", text=label
                 )
             else:  # "off" / disconnected
                 self.hotspot_btn.config(
-                    bg="#555555", activebackground="#555555", text="📡 Network"
+                    bg="#555555", activebackground="#555555", text="Network"
                 )
         if self.root:
             self.root.after(0, _apply)
@@ -700,7 +711,7 @@ class UIOverlay(threading.Thread):
             self.remote_server.stop()
             # Don't resume local display — we're about to start a new network session
 
-        self._update_network_button("scanning", f"📶 {name}…")
+        self._update_network_button("scanning", f"{name}...")
         if self.stop_display_fn:
             self.stop_display_fn()
         if self.show_hotspot_msg_fn:
@@ -713,7 +724,7 @@ class UIOverlay(threading.Thread):
             if self.resume_display_fn:
                 self.resume_display_fn()
             self._update_network_button("off")
-            print(f"❌ Failed to connect to '{name}'")
+            print(f"Failed to connect to '{name}'")
 
     def _activate_hotspot(self):
         """Start the Dogmobile hotspot (called from network menu)."""
@@ -721,7 +732,7 @@ class UIOverlay(threading.Thread):
             self.remote_server.stop()
             # Don't resume local display — we're about to start hotspot mode
 
-        self._update_network_button("scanning", "📡 Starting…")
+        self._update_network_button("scanning", "Starting...")
         if self.stop_display_fn:
             self.stop_display_fn()
         if self.show_hotspot_msg_fn:
@@ -734,7 +745,7 @@ class UIOverlay(threading.Thread):
             if self.resume_display_fn:
                 self.resume_display_fn()
             self._update_network_button("off")
-            print("❌ Failed to start hotspot")
+            print("Failed to start hotspot")
 
     def _disconnect_network(self):
         """Disconnect from the current network mode (called from network menu)."""
@@ -742,7 +753,7 @@ class UIOverlay(threading.Thread):
         if self.resume_display_fn:
             self.resume_display_fn()
         self._update_network_button("off")
-        print("📡 Disconnected — local display resumed")
+        print("Disconnected -- local display resumed")
 
     def _start_add_network_flow(self):
         """Start Dogmobile hotspot so user can visit /setup to add a new network."""
@@ -759,14 +770,14 @@ class UIOverlay(threading.Thread):
                     if self.resume_display_fn:
                         self.resume_display_fn()
                     self._update_network_button("off")
-                    print("❌ Failed to start hotspot for Add Network flow")
+                    print("Failed to start hotspot for Add Network flow")
                     return
             elif self.remote_server.mode != 'hotspot':
                 # Already in joined mode — no need to switch; just inform the user
-                print("ℹ️  Visit http://dogmobile.local:8080/setup to add a network")
+                print("Visit http://dogmobile.local:8080/setup to add a network")
                 return
             from hotspot import HOTSPOT_GATEWAY_IP
-            print(f"➕ Add Network: connect to 'Dogmobile' Wi-Fi, "
+            print(f"Add Network: connect to 'Dogmobile' Wi-Fi, "
                   f"then open http://{HOTSPOT_GATEWAY_IP}:{self.remote_server.port}/setup")
 
         threading.Thread(target=_start, daemon=True).start()
@@ -777,13 +788,15 @@ class UIOverlay(threading.Thread):
 
     def hide_main_menu(self):
         """Hide the main menu completely."""
-        # Instead of just hiding buttons, make the whole window invisible
-        self.root.attributes('-alpha', 0.0)  # Completely transparent
+        self.root.attributes('-alpha', 0.0)
+        if hasattr(self, 'network_window'):
+            self.network_window.attributes('-alpha', 0.0)
     
     def show_main_menu(self):
         """Show the main menu."""
-        # Restore original transparency
         self.root.attributes('-alpha', 0.7)
+        if hasattr(self, 'network_window'):
+            self.network_window.attributes('-alpha', 0.7)
     
     # Add this new method to UIOverlay class
     def _update_camera_state(self, camera_id):
